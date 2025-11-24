@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Train Fun 3D!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: #1a1a1a;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #top-bar {
+            background: linear-gradient(to bottom, #2c3e50, #34495e);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            z-index: 100;
+            border-bottom: 3px solid #3498db;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .top-button {
+            background: linear-gradient(to bottom, #ecf0f1, #bdc3c7);
+            border: 2px solid #2c3e50;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 3px 0 #7f8c8d, 0 5px 10px rgba(0,0,0,0.3);
+            transition: all 0.1s;
+            color: #2c3e50;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .top-button:hover {
+            background: linear-gradient(to bottom, #f8f9fa, #e0e0e0);
+        }
+
+        .top-button:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #7f8c8d, 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        #mode-toggle {
+            background: linear-gradient(to bottom, #3498db, #2980b9);
+            color: white;
+            border-color: #1a5276;
+            box-shadow: 0 3px 0 #1a5276, 0 5px 10px rgba(0,0,0,0.3);
+        }
+
+        #mode-toggle:hover {
+            background: linear-gradient(to bottom, #5dade2, #3498db);
+        }
+
+        #play-button {
+            background: linear-gradient(to bottom, #2ecc71, #27ae60);
+            color: white;
+            border-radius: 50%;
+            width: 70px;
+            height: 70px;
+            font-size: 24px;
+            padding: 0;
+            border-color: #145a32;
+            box-shadow: 0 4px 0 #145a32, 0 6px 15px rgba(0,0,0,0.4);
+        }
+
+        #play-button:hover {
+            background: linear-gradient(to bottom, #58d68d, #2ecc71);
+        }
+
+        #play-button.playing {
+            background: linear-gradient(to bottom, #e74c3c, #c0392b);
+            border-color: #7b241c;
+            box-shadow: 0 4px 0 #7b241c, 0 6px 15px rgba(0,0,0,0.4);
+        }
+
+        #sound-toggle {
+            background: linear-gradient(to bottom, #f39c12, #e67e22);
+            color: white;
+            border-color: #9a5b0c;
+            box-shadow: 0 3px 0 #9a5b0c, 0 5px 10px rgba(0,0,0,0.3);
+        }
+
+        #sound-toggle:hover {
+            background: linear-gradient(to bottom, #f9b851, #f39c12);
+        }
+
+        #sound-toggle.muted {
+            background: linear-gradient(to bottom, #95a5a6, #7f8c8d);
+            border-color: #566573;
+            box-shadow: 0 3px 0 #566573, 0 5px 10px rgba(0,0,0,0.3);
+        }
+
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        #bottom-panel {
+            background: linear-gradient(to top, #2c3e50, #34495e);
+            padding: 15px;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.5);
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            border-top: 3px solid #3498db;
+        }
+
+        #panel-header {
+            color: #ecf0f1;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .item-selector {
+            display: inline-flex;
+            gap: 12px;
+            padding: 5px 0;
+        }
+
+        .item-btn {
+            background: linear-gradient(to bottom, #ecf0f1, #bdc3c7);
+            border: 3px solid #2c3e50;
+            border-radius: 12px;
+            min-width: 100px;
+            height: 80px;
+            cursor: pointer;
+            box-shadow: 0 3px 0 #566573, 0 5px 10px rgba(0,0,0,0.4);
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #2c3e50;
+            position: relative;
+        }
+
+        .item-btn:hover {
+            background: linear-gradient(to bottom, #f8f9fa, #d5d8dc);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 0 #566573, 0 7px 15px rgba(0,0,0,0.4);
+        }
+
+        .item-btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 0 #566573, 0 2px 5px rgba(0,0,0,0.4);
+        }
+
+        .item-btn.selected {
+            background: linear-gradient(to bottom, #f39c12, #e67e22);
+            color: white;
+            border-color: #9a5b0c;
+            box-shadow: 0 3px 0 #9a5b0c, 0 5px 15px rgba(243, 156, 18, 0.6);
+        }
+
+        .item-btn.selected::after {
+            content: '✓';
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            font-size: 16px;
+            color: white;
+        }
+
+        .item-icon {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: white;
+            background: rgba(44, 62, 80, 0.95);
+            padding: 30px 50px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            border: 2px solid #3498db;
+        }
+
+        #instructions {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(44, 62, 80, 0.9);
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 13px;
+            max-width: 250px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+            border: 2px solid #3498db;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        #instructions:hover {
+            background: rgba(44, 62, 80, 0.95);
+        }
+
+        #instructions.minimized {
+            padding: 10px 15px;
+        }
+
+        #instructions.minimized ul {
+            display: none;
+        }
+
+        #instructions h3 {
+            margin: 0 0 10px 0;
+            color: #3498db;
+            font-size: 16px;
+            user-select: none;
+        }
+
+        #instructions.minimized h3 {
+            margin: 0;
+        }
+
+        #instructions h3::after {
+            content: ' ▼';
+            font-size: 12px;
+            float: right;
+        }
+
+        #instructions.minimized h3::after {
+            content: ' ▶';
+        }
+
+        #instructions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        #instructions li {
+            margin: 5px 0;
+            line-height: 1.4;
+        }
+
+        @media (max-width: 768px) {
+            .top-button {
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+
+            #play-button {
+                width: 60px;
+                height: 60px;
+                font-size: 20px;
+            }
+
+            #instructions {
+                font-size: 11px;
+                max-width: 200px;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="top-bar">
+            <div class="button-group">
+                <button id="mode-toggle" class="top-button">🚂 Train Mode</button>
+            </div>
+            <button id="play-button" class="top-button">▶</button>
+            <div class="button-group">
+                <button id="sound-toggle" class="top-button">🔊 Sound</button>
+            </div>
+        </div>
+
+        <div id="canvas-container">
+            <div id="loading">Loading 3D World...</div>
+            <div id="instructions">
+                <h3>Controls</h3>
+                <ul>
+                    <li><strong>Left Click + Drag:</strong> Rotate camera</li>
+                    <li><strong>Right Click + Drag:</strong> Pan view</li>
+                    <li><strong>Scroll:</strong> Zoom in/out</li>
+                    <li><strong>Click Ground:</strong> Place item</li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="bottom-panel">
+            <div id="panel-header">Select Item to Place:</div>
+            <div class="item-selector" id="item-selector"></div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Game state
+        const gameState = {
+            mode: 'train',
+            isPlaying: false,
+            soundEnabled: true,
+            selectedItem: null,
+            grid: new Map(),
+            trains: [],
+            trainSpeed: 500,
+            cellSize: 2
+        };
+
+        // Train and item definitions
+        const engines = [
+            { id: 'steam', name: 'Steam', icon: '🚂', color: 0x8B1A1A },
+            { id: 'diesel', name: 'Diesel', icon: '🚆', color: 0x2F5A2F },
+            { id: 'shinkansen', name: 'Shinkansen', icon: '🚄', color: 0xE8E8E8 }
+        ];
+
+        const carTypes = [
+            { id: 'passenger', name: 'Passenger', icon: '🚃' },
+            { id: 'freight', name: 'Freight', icon: '🚋' }
+        ];
+
+        const tracks = [
+            { id: 'h', name: 'Horizontal', icon: '━' },
+            { id: 'v', name: 'Vertical', icon: '┃' },
+            { id: 'tl', name: 'Curve ┓', icon: '┓' },
+            { id: 'tr', name: 'Curve ┏', icon: '┏' },
+            { id: 'bl', name: 'Curve ┛', icon: '┛' },
+            { id: 'br', name: 'Curve ┗', icon: '┗' }
+        ];
+
+        const decorations = [
+            { id: 'tree', name: 'Tree', icon: '🌲' },
+            { id: 'station', name: 'Station', icon: '🏢' }
+        ];
+
+        // Three.js setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 50);
+
+        const camera = new THREE.PerspectiveCamera(
+            60,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            100
+        );
+        camera.position.set(10, 15, 10);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        const container = document.getElementById('canvas-container');
+        container.appendChild(renderer.domElement);
+
+        // Orbit controls for camera movement
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 5;
+        controls.maxDistance = 40;
+        controls.maxPolarAngle = Math.PI / 2.2;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        sunLight.position.set(10, 20, 10);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 50;
+        sunLight.shadow.camera.left = -20;
+        sunLight.shadow.camera.right = 20;
+        sunLight.shadow.camera.top = 20;
+        sunLight.shadow.camera.bottom = -20;
+        scene.add(sunLight);
+
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(100, 100);
+        const groundMaterial = new THREE.MeshStandardMaterial({
+            color: 0x7CCD7C,
+            roughness: 0.8
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Grid helper
+        const gridHelper = new THREE.GridHelper(40, 40, 0x888888, 0xcccccc);
+        gridHelper.position.y = 0.01;
+        scene.add(gridHelper);
+
+        // Track materials
+        const railMaterial = new THREE.MeshStandardMaterial({
+            color: 0x6B6B6B,
+            metalness: 0.8,
+            roughness: 0.3
+        });
+
+        const sleeperMaterial = new THREE.MeshStandardMaterial({
+            color: 0x8B6F47,
+            roughness: 0.9
+        });
+
+        // Create track piece
+        function createTrackPiece(type, row, col) {
+            const group = new THREE.Group();
+            const cs = gameState.cellSize;
+
+            // Sleepers (ties)
+            const sleeperGeometry = new THREE.BoxGeometry(cs * 0.6, 0.1, 0.2);
+            const railGeometry = new THREE.BoxGeometry(cs * 0.9, 0.08, 0.06);
+
+            if (type === 'h') {
+                // Horizontal track
+                for (let i = -3; i <= 3; i++) {
+                    const sleeper = new THREE.Mesh(sleeperGeometry, sleeperMaterial);
+                    sleeper.position.set(i * 0.3, 0.05, 0);
+                    sleeper.rotation.y = Math.PI / 2;
+                    sleeper.castShadow = true;
+                    group.add(sleeper);
+                }
+                // Rails
+                const rail1 = new THREE.Mesh(railGeometry, railMaterial);
+                rail1.position.set(0, 0.1, -cs * 0.2);
+                rail1.castShadow = true;
+                group.add(rail1);
+
+                const rail2 = new THREE.Mesh(railGeometry, railMaterial);
+                rail2.position.set(0, 0.1, cs * 0.2);
+                rail2.castShadow = true;
+                group.add(rail2);
+            } else if (type === 'v') {
+                // Vertical track
+                for (let i = -3; i <= 3; i++) {
+                    const sleeper = new THREE.Mesh(sleeperGeometry, sleeperMaterial);
+                    sleeper.position.set(0, 0.05, i * 0.3);
+                    sleeper.castShadow = true;
+                    group.add(sleeper);
+                }
+                // Rails
+                const rail1 = new THREE.Mesh(railGeometry, railMaterial);
+                rail1.position.set(-cs * 0.2, 0.1, 0);
+                rail1.rotation.y = Math.PI / 2;
+                rail1.castShadow = true;
+                group.add(rail1);
+
+                const rail2 = new THREE.Mesh(railGeometry, railMaterial);
+                rail2.position.set(cs * 0.2, 0.1, 0);
+                rail2.rotation.y = Math.PI / 2;
+                rail2.castShadow = true;
+                group.add(rail2);
+            } else {
+                // Curved track with sleepers
+                const railSpacing = cs * 0.4; // Total width between the two rails
+                const curveRadius = cs;
+
+                // Shorter sleepers for curves (just span the width between rails)
+                const curveSleeperGeometry = new THREE.BoxGeometry(railSpacing + 0.1, 0.1, 0.15);
+
+                // Determine start angle and center offset based on curve type
+                // Curves connect at cell boundaries, so center is at corner
+                let startAngle = 0;
+                let centerX = 0, centerZ = 0;
+
+                if (type === 'tl') {
+                    // Top-left: curve from left to top (entry from west, exit to north)
+                    // Center at top-left corner of cell
+                    startAngle = 0;
+                    centerX = -cs * 0.5;
+                    centerZ = -cs * 0.5;
+                } else if (type === 'tr') {
+                    // Top-right: curve from top to right (entry from north, exit to east)
+                    // Center at top-right corner of cell
+                    startAngle = Math.PI / 2;
+                    centerX = cs * 0.5;
+                    centerZ = -cs * 0.5;
+                } else if (type === 'bl') {
+                    // Bottom-left: curve from bottom to left (entry from south, exit to west)
+                    // Center at bottom-left corner of cell
+                    startAngle = -Math.PI / 2;
+                    centerX = -cs * 0.5;
+                    centerZ = cs * 0.5;
+                } else if (type === 'br') {
+                    // Bottom-right: curve from right to bottom (entry from east, exit to south)
+                    // Center at bottom-right corner of cell
+                    startAngle = Math.PI;
+                    centerX = cs * 0.5;
+                    centerZ = cs * 0.5;
+                }
+
+                // Add sleepers along the curve
+                const numSleepers = 7;
+                for (let i = 0; i < numSleepers; i++) {
+                    const t = i / (numSleepers - 1);
+                    const angle = startAngle + t * (Math.PI / 2);
+
+                    const x = Math.cos(angle) * curveRadius + centerX;
+                    const z = Math.sin(angle) * curveRadius + centerZ;
+
+                    const sleeper = new THREE.Mesh(curveSleeperGeometry, sleeperMaterial);
+                    sleeper.position.set(x, 0.05, z);
+                    sleeper.rotation.y = angle + Math.PI / 2; // Perpendicular to curve
+                    sleeper.castShadow = true;
+                    group.add(sleeper);
+                }
+
+                // Create curved rails
+                const segments = 20;
+                const innerRadius = curveRadius - railSpacing / 2;
+                const outerRadius = curveRadius + railSpacing / 2;
+
+                // Inner rail
+                const innerPoints = [];
+                for (let i = 0; i <= segments; i++) {
+                    const t = i / segments;
+                    const angle = startAngle + t * (Math.PI / 2);
+                    const x = Math.cos(angle) * innerRadius + centerX;
+                    const z = Math.sin(angle) * innerRadius + centerZ;
+                    innerPoints.push(new THREE.Vector3(x, 0.1, z));
+                }
+                const innerCurve = new THREE.CatmullRomCurve3(innerPoints);
+                const innerRailGeometry = new THREE.TubeGeometry(innerCurve, segments, 0.03, 8, false);
+                const innerRail = new THREE.Mesh(innerRailGeometry, railMaterial);
+                innerRail.castShadow = true;
+                group.add(innerRail);
+
+                // Outer rail
+                const outerPoints = [];
+                for (let i = 0; i <= segments; i++) {
+                    const t = i / segments;
+                    const angle = startAngle + t * (Math.PI / 2);
+                    const x = Math.cos(angle) * outerRadius + centerX;
+                    const z = Math.sin(angle) * outerRadius + centerZ;
+                    outerPoints.push(new THREE.Vector3(x, 0.1, z));
+                }
+                const outerCurve = new THREE.CatmullRomCurve3(outerPoints);
+                const outerRailGeometry = new THREE.TubeGeometry(outerCurve, segments, 0.03, 8, false);
+                const outerRail = new THREE.Mesh(outerRailGeometry, railMaterial);
+                outerRail.castShadow = true;
+                group.add(outerRail);
+            }
+
+            group.position.set(col * cs, 0, row * cs);
+            return group;
+        }
+
+        // Create train
+        function createTrain(engineType) {
+            const group = new THREE.Group();
+            const engine = engines.find(e => e.id === engineType);
+
+            // Main body
+            const bodyGeometry = new THREE.BoxGeometry(0.8, 0.4, 0.5);
+            const bodyMaterial = new THREE.MeshStandardMaterial({
+                color: engine.color,
+                metalness: 0.5,
+                roughness: 0.4
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 0.3;
+            body.castShadow = true;
+            group.add(body);
+
+            // Roof/top
+            const roofGeometry = new THREE.BoxGeometry(0.7, 0.15, 0.45);
+            const roof = new THREE.Mesh(roofGeometry, bodyMaterial);
+            roof.position.y = 0.575;
+            roof.castShadow = true;
+            group.add(roof);
+
+            // Windows
+            const windowGeometry = new THREE.PlaneGeometry(0.15, 0.2);
+            const windowMaterial = new THREE.MeshStandardMaterial({
+                color: 0x87CEEB,
+                transparent: true,
+                opacity: 0.7
+            });
+
+            const window1 = new THREE.Mesh(windowGeometry, windowMaterial);
+            window1.position.set(0, 0.35, 0.251);
+            group.add(window1);
+
+            const window2 = new THREE.Mesh(windowGeometry, windowMaterial);
+            window2.position.set(0, 0.35, -0.251);
+            window2.rotation.y = Math.PI;
+            group.add(window2);
+
+            // Wheels
+            const wheelGeometry = new THREE.CylinderGeometry(0.12, 0.12, 0.08, 16);
+            const wheelMaterial = new THREE.MeshStandardMaterial({
+                color: 0x1a1a1a,
+                metalness: 0.7,
+                roughness: 0.3
+            });
+
+            const positions = [
+                [-0.3, 0.12, 0.3],
+                [-0.3, 0.12, -0.3],
+                [0.3, 0.12, 0.3],
+                [0.3, 0.12, -0.3]
+            ];
+
+            positions.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                wheel.position.set(pos[0], pos[1], pos[2]);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.castShadow = true;
+                group.add(wheel);
+            });
+
+            // Special features per engine type
+            if (engineType === 'steam') {
+                // Smokestack
+                const stackGeometry = new THREE.CylinderGeometry(0.08, 0.1, 0.4, 16);
+                const stackMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+                const stack = new THREE.Mesh(stackGeometry, stackMaterial);
+                stack.position.set(0.2, 0.8, 0);
+                stack.castShadow = true;
+                group.add(stack);
+            } else if (engineType === 'diesel') {
+                // Headlights
+                const lightGeometry = new THREE.SphereGeometry(0.06, 16, 16);
+                const lightMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xFFD700,
+                    emissive: 0xFFD700,
+                    emissiveIntensity: 1
+                });
+                const light1 = new THREE.Mesh(lightGeometry, lightMaterial);
+                light1.position.set(-0.15, 0.3, 0.26);
+                group.add(light1);
+
+                const light2 = new THREE.Mesh(lightGeometry, lightMaterial);
+                light2.position.set(0.15, 0.3, 0.26);
+                group.add(light2);
+            }
+
+            return group;
+        }
+
+        // Create decoration
+        function createDecoration(type) {
+            const group = new THREE.Group();
+
+            if (type === 'tree') {
+                // Trunk
+                const trunkGeometry = new THREE.CylinderGeometry(0.1, 0.15, 0.8, 8);
+                const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x654321 });
+                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                trunk.position.y = 0.4;
+                trunk.castShadow = true;
+                group.add(trunk);
+
+                // Foliage
+                const foliageGeometry = new THREE.ConeGeometry(0.5, 1.2, 8);
+                const foliageMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+                const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+                foliage.position.y = 1.2;
+                foliage.castShadow = true;
+                group.add(foliage);
+            } else if (type === 'station') {
+                // Building
+                const buildingGeometry = new THREE.BoxGeometry(1.5, 1, 1.2);
+                const buildingMaterial = new THREE.MeshStandardMaterial({ color: 0x778899 });
+                const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+                building.position.y = 0.5;
+                building.castShadow = true;
+                group.add(building);
+
+                // Roof
+                const roofGeometry = new THREE.BoxGeometry(1.6, 0.2, 1.3);
+                const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x505050 });
+                const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+                roof.position.y = 1.1;
+                roof.castShadow = true;
+                group.add(roof);
+            }
+
+            return group;
+        }
+
+        // Grid management
+        function getGridKey(row, col) {
+            return `${row},${col}`;
+        }
+
+        function setGridCell(row, col, data) {
+            const key = getGridKey(row, col);
+            const existing = gameState.grid.get(key);
+            if (existing && existing.mesh) {
+                scene.remove(existing.mesh);
+            }
+            gameState.grid.set(key, data);
+        }
+
+        function getGridCell(row, col) {
+            return gameState.grid.get(getGridKey(row, col)) || null;
+        }
+
+        // Create default layout
+        function createDefaultLayout() {
+            const layout = [
+                [null, 'h', 'h', 'h', 'h', 'h', null],
+                ['v', 'tl', null, null, null, 'tr', 'v'],
+                ['v', null, null, null, null, null, 'v'],
+                ['v', null, null, null, null, null, 'v'],
+                ['v', 'bl', null, null, null, 'br', 'v'],
+                [null, 'h', 'h', 'h', 'h', 'h', null]
+            ];
+
+            const offsetRow = -3;
+            const offsetCol = -3;
+
+            for (let row = 0; row < layout.length; row++) {
+                for (let col = 0; col < layout[row].length; col++) {
+                    if (layout[row][col]) {
+                        const trackMesh = createTrackPiece(layout[row][col], row + offsetRow, col + offsetCol);
+                        scene.add(trackMesh);
+                        setGridCell(row + offsetRow, col + offsetCol, {
+                            type: 'track',
+                            id: layout[row][col],
+                            mesh: trackMesh
+                        });
+                    }
+                }
+            }
+
+            // Add decorations
+            const tree = createDecoration('tree');
+            tree.position.set(-2 * gameState.cellSize, 0, -1 * gameState.cellSize);
+            scene.add(tree);
+
+            const station = createDecoration('station');
+            station.position.set(2 * gameState.cellSize, 0, 1 * gameState.cellSize);
+            scene.add(station);
+        }
+
+        // Raycasting for clicking
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let mouseDownPos = null;
+
+        renderer.domElement.addEventListener('mousedown', (event) => {
+            mouseDownPos = { x: event.clientX, y: event.clientY };
+        });
+
+        renderer.domElement.addEventListener('touchstart', (event) => {
+            if (event.touches.length === 1) {
+                mouseDownPos = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+            }
+        });
+
+        renderer.domElement.addEventListener('click', (event) => {
+            if (!mouseDownPos) return;
+
+            // Check if mouse moved significantly (more than 5 pixels)
+            const dx = event.clientX - mouseDownPos.x;
+            const dy = event.clientY - mouseDownPos.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance > 5) {
+                mouseDownPos = null;
+                return; // Was a drag, not a click
+            }
+
+            mouseDownPos = null;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(ground);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                const col = Math.round(point.x / gameState.cellSize);
+                const row = Math.round(point.z / gameState.cellSize);
+
+                handleCellClick(row, col);
+            }
+        });
+
+        function handleCellClick(row, col) {
+            if (!gameState.selectedItem) return;
+
+            if (gameState.mode === 'train' && gameState.selectedItem.type === 'engine') {
+                const cellData = getGridCell(row, col);
+                if (cellData && cellData.type === 'track') {
+                    addTrain(row, col, gameState.selectedItem.id);
+                    playSound('place');
+                }
+            } else if (gameState.mode === 'build') {
+                if (gameState.selectedItem.type === 'track') {
+                    const trackMesh = createTrackPiece(gameState.selectedItem.id, row, col);
+                    scene.add(trackMesh);
+                    setGridCell(row, col, {
+                        type: 'track',
+                        id: gameState.selectedItem.id,
+                        mesh: trackMesh
+                    });
+                    playSound('build');
+                } else if (gameState.selectedItem.type === 'decoration') {
+                    const decorationMesh = createDecoration(gameState.selectedItem.id);
+                    decorationMesh.position.set(col * gameState.cellSize, 0, row * gameState.cellSize);
+                    scene.add(decorationMesh);
+                    setGridCell(row, col, {
+                        type: 'decoration',
+                        id: gameState.selectedItem.id,
+                        mesh: decorationMesh
+                    });
+                    playSound('build');
+                }
+            }
+        }
+
+        function addTrain(row, col, engineType) {
+            const trainMesh = createTrain(engineType);
+            trainMesh.position.set(col * gameState.cellSize, 0, row * gameState.cellSize);
+            scene.add(trainMesh);
+
+            const train = {
+                id: Date.now(),
+                engineType: engineType,
+                row: row,
+                col: col,
+                direction: 'right',
+                mesh: trainMesh
+            };
+
+            gameState.trains.push(train);
+        }
+
+        // Move trains
+        function moveTrains() {
+            if (!gameState.isPlaying) return;
+
+            gameState.trains.forEach(train => {
+                const currentCell = getGridCell(train.row, train.col);
+                if (!currentCell || currentCell.type !== 'track') return;
+
+                let nextRow = train.row;
+                let nextCol = train.col;
+                let nextDirection = train.direction;
+                const trackType = currentCell.id;
+
+                // Same movement logic as before
+                if (trackType === 'h') {
+                    if (train.direction === 'right') nextCol++;
+                    else if (train.direction === 'left') nextCol--;
+                } else if (trackType === 'v') {
+                    if (train.direction === 'down') nextRow++;
+                    else if (train.direction === 'up') nextRow--;
+                } else if (trackType === 'tl') {
+                    if (train.direction === 'down') {
+                        nextCol++;
+                        nextDirection = 'right';
+                    } else if (train.direction === 'left') {
+                        nextRow++;
+                        nextDirection = 'down';
+                    }
+                } else if (trackType === 'tr') {
+                    if (train.direction === 'down') {
+                        nextCol--;
+                        nextDirection = 'left';
+                    } else if (train.direction === 'right') {
+                        nextRow++;
+                        nextDirection = 'down';
+                    }
+                } else if (trackType === 'bl') {
+                    if (train.direction === 'up') {
+                        nextCol++;
+                        nextDirection = 'right';
+                    } else if (train.direction === 'left') {
+                        nextRow--;
+                        nextDirection = 'up';
+                    }
+                } else if (trackType === 'br') {
+                    if (train.direction === 'up') {
+                        nextCol--;
+                        nextDirection = 'left';
+                    } else if (train.direction === 'right') {
+                        nextRow--;
+                        nextDirection = 'up';
+                    }
+                }
+
+                if (getGridCell(nextRow, nextCol)?.type === 'track') {
+                    train.row = nextRow;
+                    train.col = nextCol;
+                    train.direction = nextDirection;
+
+                    // Animate movement
+                    const targetX = nextCol * gameState.cellSize;
+                    const targetZ = nextRow * gameState.cellSize;
+
+                    train.mesh.position.x += (targetX - train.mesh.position.x) * 0.1;
+                    train.mesh.position.z += (targetZ - train.mesh.position.z) * 0.1;
+
+                    // Rotate based on direction
+                    const rotations = {
+                        'right': 0,
+                        'down': Math.PI / 2,
+                        'left': Math.PI,
+                        'up': -Math.PI / 2
+                    };
+                    train.mesh.rotation.y = rotations[train.direction] || 0;
+
+                    if (Math.random() < 0.1) {
+                        const engine = engines.find(e => e.id === train.engineType);
+                        if (engine) playSound(engine.id);
+                    }
+                }
+            });
+        }
+
+        // Sound system
+        let audioContext = null;
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+
+        function playSound(type) {
+            if (!gameState.soundEnabled) return;
+
+            try {
+                initAudio();
+
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                const sounds = {
+                    'steam': { freq: 280, duration: 0.35, type: 'square' },
+                    'diesel': { freq: 220, duration: 0.5, type: 'square' },
+                    'shinkansen': { freq: 950, duration: 0.22, type: 'sine' },
+                    'place': { freq: 650, duration: 0.08, type: 'sine' },
+                    'build': { freq: 420, duration: 0.08, type: 'triangle' }
+                };
+
+                const sound = sounds[type] || sounds.place;
+
+                oscillator.type = sound.type;
+                oscillator.frequency.value = sound.freq;
+                gainNode.gain.setValueAtTime(0.12, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + sound.duration);
+
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + sound.duration);
+            } catch (e) {
+                console.error('Audio error:', e);
+            }
+        }
+
+        // UI
+        function updateItemSelector() {
+            const selector = document.getElementById('item-selector');
+            const panelHeader = document.getElementById('panel-header');
+            selector.innerHTML = '';
+
+            let items = [];
+            if (gameState.mode === 'train') {
+                items = engines.map(e => ({ ...e, type: 'engine' }));
+                panelHeader.textContent = 'Select Train to Place:';
+            } else {
+                items = [...tracks.map(t => ({ ...t, type: 'track' })), ...decorations.map(d => ({ ...d, type: 'decoration' }))];
+                panelHeader.textContent = 'Select Track or Decoration:';
+            }
+
+            items.forEach((item, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'item-btn';
+
+                const icon = document.createElement('div');
+                icon.className = 'item-icon';
+                icon.textContent = item.icon || item.name;
+
+                const name = document.createElement('div');
+                name.textContent = item.name;
+
+                btn.appendChild(icon);
+                btn.appendChild(name);
+
+                btn.addEventListener('click', () => {
+                    const wasSelected = btn.classList.contains('selected');
+                    document.querySelectorAll('.item-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    gameState.selectedItem = item;
+                    if (!wasSelected) {
+                        playSound('place');
+                    }
+                });
+
+                selector.appendChild(btn);
+            });
+
+            // Auto-select first item without sound
+            if (items.length > 0) {
+                selector.firstChild.classList.add('selected');
+                gameState.selectedItem = items[0];
+            }
+        }
+
+        // Button handlers
+        document.getElementById('mode-toggle').addEventListener('click', function() {
+            gameState.mode = gameState.mode === 'train' ? 'build' : 'train';
+            this.textContent = gameState.mode === 'train' ? '🚂 Train Mode' : '🔨 Build Mode';
+            updateItemSelector();
+            playSound('build');
+        });
+
+        document.getElementById('play-button').addEventListener('click', function() {
+            gameState.isPlaying = !gameState.isPlaying;
+            this.textContent = gameState.isPlaying ? '⏸' : '▶';
+            this.classList.toggle('playing');
+            playSound('steam');
+        });
+
+        document.getElementById('sound-toggle').addEventListener('click', function() {
+            gameState.soundEnabled = !gameState.soundEnabled;
+            this.textContent = gameState.soundEnabled ? '🔊 Sound' : '🔇 Muted';
+            this.classList.toggle('muted');
+        });
+
+        // Animation loop
+        let lastTrainMove = 0;
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            controls.update();
+
+            if (gameState.isPlaying && time - lastTrainMove > gameState.trainSpeed) {
+                moveTrains();
+                lastTrainMove = time;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Handle resize
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+
+        window.addEventListener('resize', onWindowResize);
+        onWindowResize();
+
+        // Instructions toggle
+        document.getElementById('instructions').addEventListener('click', function(e) {
+            e.stopPropagation();
+            this.classList.toggle('minimized');
+        });
+
+        // Initialize
+        createDefaultLayout();
+        updateItemSelector();
+
+        document.getElementById('loading').style.display = 'none';
+        animate(0);
+    </script>
+</body>
+</html>
