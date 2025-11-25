@@ -1060,6 +1060,28 @@ function lerpAngleShortest(a, b, t) {
     return a + diff * t;
 }
 
+// Get the exit direction for a curve given the entry direction
+function getCurveExitDir(trackType, enterDir) {
+    if (trackType === 'curve-tl') {
+        // Connectivity: DOWN -> LEFT, RIGHT -> UP
+        if (enterDir === DIR.DOWN) return DIR.LEFT;
+        if (enterDir === DIR.RIGHT) return DIR.UP;
+    } else if (trackType === 'curve-tr') {
+        // Connectivity: LEFT -> UP, DOWN -> RIGHT
+        if (enterDir === DIR.LEFT) return DIR.UP;
+        if (enterDir === DIR.DOWN) return DIR.RIGHT;
+    } else if (trackType === 'curve-bl') {
+        // Connectivity: RIGHT -> DOWN, UP -> LEFT
+        if (enterDir === DIR.RIGHT) return DIR.DOWN;
+        if (enterDir === DIR.UP) return DIR.LEFT;
+    } else if (trackType === 'curve-br') {
+        // Connectivity: UP -> RIGHT, LEFT -> DOWN
+        if (enterDir === DIR.UP) return DIR.RIGHT;
+        if (enterDir === DIR.LEFT) return DIR.DOWN;
+    }
+    return null; // Invalid combination
+}
+
 // ============================================================================
 // TRAIN MOVEMENT
 // ============================================================================
@@ -1286,16 +1308,19 @@ function updateTrainPosition(train) {
         if (startAngle === undefined || endAngle === undefined) {
             x = cellCenterX;
             z = cellCenterZ;
-            rotation = getRotationForDirection(train.dir);
+            rotation = getRotationForDirection(train.enterDir);
         } else {
             const currentAngle = startAngle + (endAngle - startAngle) * train.progress;
             x = centerX + R * Math.cos(currentAngle);
             z = centerZ + R * Math.sin(currentAngle);
 
-            // Rotate smoothly from entry direction to exit direction
-            const startRot = getRotationForDirection(train.enterDir);
-            const endRot = getRotationForDirection(train.dir);  // dir is exitDir for this cell
-            rotation = lerpAngleShortest(startRot, endRot, train.progress);
+            const entryDir = train.enterDir;
+            const exitDir = getCurveExitDir(trackType, entryDir);
+            const entryRot = getRotationForDirection(entryDir);
+            const exitRot = getRotationForDirection(exitDir);
+            
+            //  Negate the difference to go the opposite direction
+            rotation = lerpAngleShortest(entryRot, entryRot - (exitRot - entryRot), train.progress);
         }
     }
 
