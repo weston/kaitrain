@@ -7,10 +7,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const GRID_SIZE = 16;
 const CELL_SIZE = 2;
-const TRACK_WIDTH = 0.3;
+const TRACK_WIDTH = 0.4;
 const RAIL_HEIGHT = 0.05;
 const SLEEPER_HEIGHT = 0.1;
-const SLEEPER_LENGTH = TRACK_WIDTH * 2.4;
+const SLEEPER_LENGTH = 0.8; // Fixed length, not dependent on track width
 
 // Directions
 const DIR = {
@@ -30,6 +30,7 @@ let grid = []; // grid[row][col] = { kind, trackType, mesh, ... }
 let trains = []; // { row, col, dir, enterDir, engineType, cars, mesh, speed, progress, moving }
 let mode = 'track'; // 'track' or 'train'
 let selectedType = 'straight'; // 'straight' or 'curve'
+let deleteMode = false; // true when delete tool is selected
 let selectedEngine = null;
 let selectedCars = [];
 let isPlaying = false;
@@ -155,6 +156,7 @@ function initUI() {
             document.getElementById('track-items').style.display = 'none';
             document.getElementById('train-items').style.display = 'flex';
             selectedType = 'engine-steam';
+            deleteMode = false;
             updateSelection();
         } else {
             mode = 'track';
@@ -163,6 +165,7 @@ function initUI() {
             document.getElementById('track-items').style.display = 'flex';
             document.getElementById('train-items').style.display = 'none';
             selectedType = 'straight';
+            deleteMode = false;
             selectedEngine = null;
             selectedCars = [];
             updateSelection();
@@ -196,7 +199,13 @@ function initUI() {
             const type = btn.dataset.type;
 
             if (mode === 'track') {
-                selectedType = type; // 'straight' or 'curve'
+                if (type === 'delete') {
+                    deleteMode = true;
+                    selectedType = null;
+                } else {
+                    deleteMode = false;
+                    selectedType = type; // 'straight' or 'curve'
+                }
                 updateSelection();
             } else {
                 // Train mode
@@ -224,7 +233,9 @@ function updateSelection() {
     if (mode === 'track') {
         const trackItems = document.getElementById('track-items');
         trackItems.querySelectorAll('.item-btn').forEach(btn => {
-            if (btn.dataset.type === selectedType) {
+            if (deleteMode && btn.dataset.type === 'delete') {
+                btn.classList.add('selected');
+            } else if (!deleteMode && btn.dataset.type === selectedType) {
                 btn.classList.add('selected');
             }
         });
@@ -314,7 +325,7 @@ function createTrackMesh(type) {
 }
 
 function createStraightTrack(group, horizontal) {
-    const trackLength = CELL_SIZE;
+    const trackLength = CELL_SIZE * 0.99;
     const sleeperCount = 5;
     const sleeperSpacing = trackLength / (sleeperCount - 1);
     const sleeperWidth = 0.15;
@@ -858,6 +869,32 @@ function placeTrackPiece(row, col, trackType) {
     };
 
     playSound('place');
+}
+
+function deleteTrack(row, col) {
+    const cell = grid[row][col];
+
+    // Only delete if there's a track
+    if (cell && cell.kind === 'track') {
+        // Remove the mesh from scene
+        if (cell.mesh) {
+            scene.remove(cell.mesh);
+        }
+
+        // Reset the cell
+        grid[row][col] = { kind: null };
+
+        // Remove any trains at this location
+        trains = trains.filter(train => {
+            if (train.row === row && train.col === col) {
+                scene.remove(train.mesh);
+                return false;
+            }
+            return true;
+        });
+
+        playSound('place');
+    }
 }
 
 function placeTrain(row, col) {
