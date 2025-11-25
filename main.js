@@ -28,14 +28,11 @@ let scene, camera, renderer, controls;
 let groundPlane, gridHelper;
 let grid = []; // grid[row][col] = { kind, trackType, mesh, ... }
 let trains = []; // { row, col, dir, enterDir, engineType, cars, mesh, speed, progress, moving, stopped }
-let mode = 'track'; // 'track' or 'train'
-let selectedType = 'straight'; // 'straight' or 'curve'
-let deleteMode = false; // true when delete tool is selected
-let selectedEngine = null;
-let selectedCars = [];
+let selectedTool = 'straight'; // 'straight', 'curve', 'engine-steam', 'engine-diesel', 'delete'
 let isPlaying = false;
 let soundEnabled = true;
 let audioContext = null;
+let steamEngineSound = null;
 
 // Raycaster for picking
 const raycaster = new THREE.Raycaster();
@@ -146,32 +143,6 @@ function onWindowResize() {
 // ============================================================================
 
 function initUI() {
-    // Mode button
-    const modeBtn = document.getElementById('mode-btn');
-    modeBtn.addEventListener('click', () => {
-        if (mode === 'track') {
-            mode = 'train';
-            modeBtn.textContent = '🚂 Trains';
-            modeBtn.classList.add('active');
-            document.getElementById('track-items').style.display = 'none';
-            document.getElementById('train-items').style.display = 'flex';
-            selectedType = 'engine-steam';
-            deleteMode = false;
-            updateSelection();
-        } else {
-            mode = 'track';
-            modeBtn.textContent = '🛤️ Tracks';
-            modeBtn.classList.remove('active');
-            document.getElementById('track-items').style.display = 'flex';
-            document.getElementById('train-items').style.display = 'none';
-            selectedType = 'straight';
-            deleteMode = false;
-            selectedEngine = null;
-            selectedCars = [];
-            updateSelection();
-        }
-    });
-
     // Play button
     const playBtn = document.getElementById('play-btn');
     playBtn.addEventListener('click', () => {
@@ -180,9 +151,11 @@ function initUI() {
             playBtn.textContent = '⏸️';
             playBtn.classList.add('playing');
             playSound('start');
+            updateSteamEngineSound();
         } else {
             playBtn.textContent = '▶️';
             playBtn.classList.remove('playing');
+            updateSteamEngineSound();
         }
     });
 
@@ -191,34 +164,14 @@ function initUI() {
     soundBtn.addEventListener('click', () => {
         soundEnabled = !soundEnabled;
         soundBtn.textContent = soundEnabled ? '🔊' : '🔇';
+        updateSteamEngineSound();
     });
 
     // Item buttons
     document.querySelectorAll('.item-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const type = btn.dataset.type;
-
-            if (mode === 'track') {
-                if (type === 'delete') {
-                    deleteMode = true;
-                    selectedType = null;
-                } else {
-                    deleteMode = false;
-                    selectedType = type; // 'straight' or 'curve'
-                }
-                updateSelection();
-            } else {
-                // Train mode
-                if (type.startsWith('engine-')) {
-                    selectedEngine = type;
-                    selectedCars = [];
-                } else if (type.startsWith('car-')) {
-                    if (selectedCars.length < 2) {
-                        selectedCars.push(type);
-                    }
-                }
-                updateSelection();
-            }
+            selectedTool = btn.dataset.type;
+            updateSelection();
         });
     });
 
@@ -227,28 +180,12 @@ function initUI() {
 
 function updateSelection() {
     document.querySelectorAll('.item-btn').forEach(btn => {
-        btn.classList.remove('selected');
+        if (btn.dataset.type === selectedTool) {
+            btn.classList.add('selected');
+        } else {
+            btn.classList.remove('selected');
+        }
     });
-
-    if (mode === 'track') {
-        const trackItems = document.getElementById('track-items');
-        trackItems.querySelectorAll('.item-btn').forEach(btn => {
-            if (deleteMode && btn.dataset.type === 'delete') {
-                btn.classList.add('selected');
-            } else if (!deleteMode && btn.dataset.type === selectedType) {
-                btn.classList.add('selected');
-            }
-        });
-    } else {
-        const trainItems = document.getElementById('train-items');
-        trainItems.querySelectorAll('.item-btn').forEach(btn => {
-            if (btn.dataset.type === selectedEngine) {
-                btn.classList.add('selected');
-            } else if (selectedCars.includes(btn.dataset.type)) {
-                btn.classList.add('selected');
-            }
-        });
-    }
 }
 
 // ============================================================================
@@ -286,10 +223,34 @@ function onPointerUp(event) {
 function handleTap() {
     raycaster.setFromCamera(pointer, camera);
 
-    // In delete mode, also check for intersections with track meshes
-    let intersects;
-    if (mode === 'track' && deleteMode) {
-        // Collect all track meshes
+    // In delete mode, check for trains first
+    if (selectedTool === 'delete') {
+        // Check for train hits
+        const trainMeshes = trains.map(t => t.mesh);
+        const trainIntersects = raycaster.intersectObjects(trainMeshes, true);
+
+        if (trainIntersects.length > 0) {
+            // Find which train was clicked
+            const clickedMesh = trainIntersects[0].object;
+            let clickedTrainMesh = clickedMesh;
+
+            // Traverse up to find the train group
+            while (clickedTrainMesh.parent && !trains.some(t => t.mesh === clickedTrainMesh)) {
+                clickedTrainMesh = clickedTrainMesh.parent;
+            }
+
+            // Delete the train
+            const trainIndex = trains.findIndex(t => t.mesh === clickedTrainMesh);
+            if (trainIndex !== -1) {
+                scene.remove(trains[trainIndex].mesh);
+                trains.splice(trainIndex, 1);
+                playSound('place');
+                updateSteamEngineSound();
+                return;
+            }
+        }
+
+        // Check for track hits
         const trackMeshes = [];
         for (let r = 0; r < GRID_SIZE; r++) {
             for (let c = 0; c < GRID_SIZE; c++) {
@@ -298,12 +259,10 @@ function handleTap() {
                 }
             }
         }
-        // Check intersections with tracks first
-        intersects = raycaster.intersectObjects(trackMeshes, true);
+        const trackIntersects = raycaster.intersectObjects(trackMeshes, true);
 
-        // If we hit a track, find which cell it belongs to
-        if (intersects.length > 0) {
-            const point = intersects[0].point;
+        if (trackIntersects.length > 0) {
+            const point = trackIntersects[0].point;
             const col = Math.floor(point.x / CELL_SIZE);
             const row = Math.floor(point.z / CELL_SIZE);
 
@@ -314,8 +273,8 @@ function handleTap() {
         }
     }
 
-    // Otherwise, use ground plane intersection
-    intersects = raycaster.intersectObject(groundPlane);
+    // Use ground plane intersection
+    const intersects = raycaster.intersectObject(groundPlane);
 
     if (intersects.length > 0) {
         const point = intersects[0].point;
@@ -323,16 +282,12 @@ function handleTap() {
         const row = Math.floor(point.z / CELL_SIZE);
 
         if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE) {
-            if (mode === 'track') {
-                if (deleteMode) {
-                    deleteTrack(row, col);
-                } else {
-                    placeTrackSmart(row, col, selectedType);
-                }
-            } else if (mode === 'train') {
-                if (selectedEngine) {
-                    placeTrain(row, col);
-                }
+            if (selectedTool === 'straight' || selectedTool === 'curve') {
+                placeTrackSmart(row, col, selectedTool);
+            } else if (selectedTool === 'engine-steam' || selectedTool === 'engine-diesel') {
+                placeTrain(row, col, selectedTool);
+            } else if (selectedTool === 'delete') {
+                deleteTrack(row, col);
             }
         }
     }
@@ -570,6 +525,42 @@ function createStation(group) {
 // TRAIN CREATION
 // ============================================================================
 
+function createSmokeParticles() {
+    const particleCount = 50;
+    const particles = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = [];
+    const lifetimes = [];
+
+    for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] = 0;
+        positions[i * 3 + 1] = 0;
+        positions[i * 3 + 2] = 0;
+        velocities.push({ x: 0, y: 0, z: 0 });
+        lifetimes.push(0);
+    }
+
+    particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const smokeMaterial = new THREE.PointsMaterial({
+        color: 0xcccccc,
+        size: 0.20,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        sizeAttenuation: true
+    });
+
+    const smokeSystem = new THREE.Points(particles, smokeMaterial);
+    smokeSystem.userData.velocities = velocities;
+    smokeSystem.userData.lifetimes = lifetimes;
+    smokeSystem.userData.particleIndex = 0;
+    smokeSystem.userData.timeSinceLastEmit = 0;
+
+    return smokeSystem;
+}
+
 function createTrainMesh(engineType, cars = []) {
     const trainGroup = new THREE.Group();
 
@@ -577,6 +568,11 @@ function createTrainMesh(engineType, cars = []) {
     let engineMesh;
     if (engineType === 'engine-steam') {
         engineMesh = createSteamEngine();
+        // Add smoke particle system
+        const smokeSystem = createSmokeParticles();
+        smokeSystem.position.set(0, 0.91, 0.42); // Position at the top of smokestack
+        trainGroup.add(smokeSystem);
+        trainGroup.userData.smokeSystem = smokeSystem;
     } else if (engineType === 'engine-diesel') {
         engineMesh = createDieselEngine();
     } else if (engineType === 'engine-bullet') {
@@ -1270,10 +1266,11 @@ function deleteTrack(row, col) {
         });
 
         playSound('place');
+        updateSteamEngineSound();
     }
 }
 
-function placeTrain(row, col) {
+function placeTrain(row, col, engineType) {
     const cell = grid[row][col];
 
     // Must be on a track
@@ -1291,7 +1288,7 @@ function placeTrain(row, col) {
     });
 
     // Create train
-    const trainMesh = createTrainMesh(selectedEngine, selectedCars);
+    const trainMesh = createTrainMesh(engineType, []);
 
     // Determine initial direction based on track type
     let initialDir = DIR.RIGHT;
@@ -1358,7 +1355,7 @@ function placeTrain(row, col) {
         }
     }
 
-    trainMesh.position.set(startX, 0, startZ);
+    trainMesh.position.set(startX, 0.08, startZ);
     trainMesh.rotation.y = getRotationForDirection(initialEnterDir);
     scene.add(trainMesh);
 
@@ -1367,8 +1364,8 @@ function placeTrain(row, col) {
         col,
         dir: initialDir,
         enterDir: initialEnterDir,
-        engineType: selectedEngine,
-        cars: [...selectedCars],
+        engineType: engineType,
+        cars: [],
         mesh: trainMesh,
         speed: 1.5, // cells per second
         progress: 0, // 0 to 1 within current cell
@@ -1377,11 +1374,7 @@ function placeTrain(row, col) {
     });
 
     playSound('place');
-
-    // Reset selection for next placement
-    selectedEngine = null;
-    selectedCars = [];
-    updateSelection();
+    updateSteamEngineSound();
 }
 
 // IMPORTANT: fixed to match actual geometry (front = +Z at rotation 0)
@@ -1404,9 +1397,15 @@ function getRotationForDirection(dir) {
 // ============================================================================
 
 function stepTrains(delta) {
-    if (!isPlaying) return;
-
     trains.forEach(train => {
+        // Update smoke particles for steam engines
+        if (train.mesh.userData.smokeSystem) {
+            const shouldEmitSmoke = isPlaying && !train.stopped;
+            updateSmokeParticles(train.mesh.userData.smokeSystem, delta, shouldEmitSmoke);
+        }
+
+        if (!isPlaying) return;
+
         const cell = grid[train.row][train.col];
         if (!cell || cell.kind !== 'track') {
             return; // Train is stuck
@@ -1430,6 +1429,64 @@ function stepTrains(delta) {
     });
 }
 
+function updateSmokeParticles(smokeSystem, delta, shouldEmit) {
+    if (!smokeSystem) return;
+
+    const positions = smokeSystem.geometry.attributes.position.array;
+    const velocities = smokeSystem.userData.velocities;
+    const lifetimes = smokeSystem.userData.lifetimes;
+    const particleCount = positions.length / 3;
+
+    // Update existing particles
+    for (let i = 0; i < particleCount; i++) {
+        if (lifetimes[i] > 0) {
+            // Update position
+            positions[i * 3] += velocities[i].x * delta;
+            positions[i * 3 + 1] += velocities[i].y * delta;
+            positions[i * 3 + 2] += velocities[i].z * delta;
+
+            // Decrease lifetime
+            lifetimes[i] -= delta;
+
+            // Reset dead particles
+            if (lifetimes[i] <= 0) {
+                positions[i * 3] = 0;
+                positions[i * 3 + 1] = 0;
+                positions[i * 3 + 2] = 0;
+            }
+        }
+    }
+
+    // Emit new particles
+    if (shouldEmit) {
+        smokeSystem.userData.timeSinceLastEmit += delta;
+
+        if (smokeSystem.userData.timeSinceLastEmit >= 0.1) { // Emit every 0.1 seconds
+            smokeSystem.userData.timeSinceLastEmit = 0;
+
+            const idx = smokeSystem.userData.particleIndex;
+
+            // Reset particle at smokestack position
+            positions[idx * 3] = (Math.random() - 0.5) * 0.05;
+            positions[idx * 3 + 1] = 0;
+            positions[idx * 3 + 2] = (Math.random() - 0.5) * 0.05;
+
+            // Set velocity (upward with slight randomness)
+            velocities[idx].x = (Math.random() - 0.5) * 0.1;
+            velocities[idx].y = 0.3 + Math.random() * 0.2;
+            velocities[idx].z = (Math.random() - 0.5) * 0.1;
+
+            // Set lifetime
+            lifetimes[idx] = 1.5 + Math.random() * 0.5;
+
+            // Move to next particle
+            smokeSystem.userData.particleIndex = (idx + 1) % particleCount;
+        }
+    }
+
+    smokeSystem.geometry.attributes.position.needsUpdate = true;
+}
+
 function moveTrainToNextCell(train) {
     const cell = grid[train.row][train.col];
     const trackType = cell.trackType;
@@ -1441,6 +1498,7 @@ function moveTrainToNextCell(train) {
         // No valid next cell, stop the train
         train.progress = 1.0; // Keep at end of current cell
         train.stopped = true;
+        updateSteamEngineSound();
         return;
     }
 
@@ -1450,6 +1508,7 @@ function moveTrainToNextCell(train) {
         // Reached end of track, stop the train
         train.progress = 1.0; // Keep at end of current cell
         train.stopped = true;
+        updateSteamEngineSound();
         return;
     }
 
@@ -1660,6 +1719,11 @@ function initAudio() {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
     }, { once: true });
+
+    // Load steam engine sound
+    steamEngineSound = new Audio('./sounds/steamengine.mp3');
+    steamEngineSound.loop = true;
+    steamEngineSound.volume = 0.5;
 }
 
 function playSound(type) {
@@ -1685,6 +1749,27 @@ function playSound(type) {
         gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
         oscillator.start(now);
         oscillator.stop(now + 0.2);
+    }
+}
+
+function updateSteamEngineSound() {
+    if (!steamEngineSound) return;
+
+    // Check if there are any steam engines on the tracks that are moving (not stopped)
+    const hasMovingSteamEngine = trains.some(train =>
+        train.engineType === 'engine-steam' && !train.stopped
+    );
+
+    if (soundEnabled && isPlaying && hasMovingSteamEngine) {
+        // Play sound if not already playing
+        if (steamEngineSound.paused) {
+            steamEngineSound.play().catch(err => console.log('Audio play failed:', err));
+        }
+    } else {
+        // Pause sound
+        if (!steamEngineSound.paused) {
+            steamEngineSound.pause();
+        }
     }
 }
 

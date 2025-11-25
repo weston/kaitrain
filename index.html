@@ -5,13 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>Train Builder - For Kids!</title>
+    <title>KaiTrain</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- Top Bar -->
     <div id="top-bar">
-        <button id="mode-btn" class="btn">🛤️ Tracks</button>
         <button id="play-btn" class="btn btn-play">▶️</button>
         <button id="sound-btn" class="btn">🔊</button>
     </div>
@@ -21,8 +20,7 @@
 
     <!-- Bottom Panel -->
     <div id="bottom-panel">
-        <!-- Track Mode Items -->
-        <div id="track-items" class="item-list">
+        <div class="item-list">
             <button class="item-btn" data-type="straight">
                 <div class="item-icon">━</div>
                 <div class="item-label">Straight</div>
@@ -31,14 +29,6 @@
                 <div class="item-icon">╯</div>
                 <div class="item-label">Curve</div>
             </button>
-            <button class="item-btn" data-type="delete">
-                <div class="item-icon">🗑️</div>
-                <div class="item-label">Delete</div>
-            </button>
-        </div>
-
-        <!-- Train Mode Items -->
-        <div id="train-items" class="item-list" style="display: none;">
             <button class="item-btn" data-type="engine-steam">
                 <div class="item-icon">🚂</div>
                 <div class="item-label">Steam</div>
@@ -47,17 +37,9 @@
                 <div class="item-icon">🚃</div>
                 <div class="item-label">Diesel</div>
             </button>
-            <button class="item-btn" data-type="engine-bullet">
-                <div class="item-icon">🚄</div>
-                <div class="item-label">Bullet</div>
-            </button>
-            <button class="item-btn" data-type="car-passenger">
-                <div class="item-icon">🚋</div>
-                <div class="item-label">Passenger</div>
-            </button>
-            <button class="item-btn" data-type="car-freight">
-                <div class="item-icon">📦</div>
-                <div class="item-label">Freight</div>
+            <button class="item-btn" data-type="delete">
+                <div class="item-icon">🗑️</div>
+                <div class="item-label">Delete</div>
             </button>
         </div>
     </div>
