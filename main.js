@@ -2432,7 +2432,7 @@ function initAudio() {
     dingSound.volume = 0.7;
     dingSound.load(); // Preload the audio
     dingSound.addEventListener('error', (e) => {
-        console.error('Failed to load dingding.mp3:', e);
+        console.error('Failed to load dingding.mp3.mov:', e);
     });
 }
 
