@@ -10,6 +10,7 @@ const CELL_SIZE = 2;
 const TRACK_WIDTH = 0.3;
 const RAIL_HEIGHT = 0.05;
 const SLEEPER_HEIGHT = 0.1;
+const SLEEPER_LENGTH = TRACK_WIDTH * 2.4;
 
 // Directions
 const DIR = {
@@ -313,11 +314,11 @@ function createTrackMesh(type) {
 }
 
 function createStraightTrack(group, horizontal) {
-    const trackLength = CELL_SIZE * 0.9;
+    const trackLength = CELL_SIZE;
     const sleeperCount = 5;
     const sleeperSpacing = trackLength / (sleeperCount - 1);
     const sleeperWidth = 0.15;
-    const sleeperLength = TRACK_WIDTH * 3;
+    const sleeperLength = SLEEPER_LENGTH
 
     // Sleepers (brown wooden ties)
     const sleeperGeometry = new THREE.BoxGeometry(
@@ -414,10 +415,11 @@ function createCurvedTrack(group, type) {
     }
 
     // Sleepers along the curve
-    const sleeperCount = 8;
+    const sleeperCount = 6;
     const sleeperWidth = 0.15;
-    const sleeperLength = TRACK_WIDTH * 3;
-    const sleeperGeometry = new THREE.BoxGeometry(sleeperLength, SLEEPER_HEIGHT, sleeperWidth);
+    const sleeperLength = SLEEPER_LENGTH
+    // Create sleeper with length along Z-axis to match straight track orientation
+    const sleeperGeometry = new THREE.BoxGeometry(sleeperWidth, SLEEPER_HEIGHT, sleeperLength);
     const sleeperMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
 
     for (let i = 0; i < sleeperCount; i++) {
@@ -428,7 +430,8 @@ function createCurvedTrack(group, type) {
 
         const sleeper = new THREE.Mesh(sleeperGeometry, sleeperMaterial);
         sleeper.position.set(x, SLEEPER_HEIGHT / 2, z);
-        sleeper.rotation.y = angle + Math.PI / 2;
+        // Sleeper length is along Z-axis, rotate to point radially (perpendicular to rails)
+        sleeper.rotation.y = Math.PI / 2 - angle;
         sleeper.castShadow = true;
         sleeper.receiveShadow = true;
         group.add(sleeper);
