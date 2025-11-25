@@ -486,12 +486,23 @@ function createCurvedTrack(group, type) {
         group.add(sleeper);
     }
 
-    // Rails (curved)
+    // Rails (curved) - using ExtrudeGeometry for flat tops
     const railMaterial = new THREE.MeshStandardMaterial({
         color: 0x888888,
         metalness: 0.7,
         roughness: 0.3
     });
+
+    // Create a rectangular cross-section shape for the rail (flat top)
+    // Match the straight track rail dimensions: 0.1 wide × RAIL_HEIGHT (0.05) tall
+    const railWidth = 0.1;
+    const railHeight = RAIL_HEIGHT;
+    const railCrossSection = new THREE.Shape();
+    railCrossSection.moveTo(-railHeight / 2, -railWidth / 2);
+    railCrossSection.lineTo(railHeight / 2, -railWidth / 2);
+    railCrossSection.lineTo(railHeight / 2, railWidth / 2);
+    railCrossSection.lineTo(-railHeight / 2, railWidth / 2);
+    railCrossSection.lineTo(-railHeight / 2, -railWidth / 2);
 
     // Inner rail
     const innerRailCurve = new THREE.EllipseCurve(
@@ -502,14 +513,16 @@ function createCurvedTrack(group, type) {
         0
     );
     const innerRailPoints = innerRailCurve.getPoints(segments);
-    const innerRailShape = new THREE.TubeGeometry(
-        new THREE.CatmullRomCurve3(innerRailPoints.map(p => new THREE.Vector3(p.x, SLEEPER_HEIGHT + RAIL_HEIGHT / 2, p.y))),
-        segments,
-        0.05,
-        8,
-        false
+    const innerRailPath = new THREE.CatmullRomCurve3(
+        innerRailPoints.map(p => new THREE.Vector3(p.x, SLEEPER_HEIGHT + RAIL_HEIGHT / 2, p.y))
     );
-    const innerRailMesh = new THREE.Mesh(innerRailShape, railMaterial);
+
+    const innerRailGeometry = new THREE.ExtrudeGeometry(railCrossSection, {
+        steps: segments,
+        bevelEnabled: false,
+        extrudePath: innerRailPath
+    });
+    const innerRailMesh = new THREE.Mesh(innerRailGeometry, railMaterial);
     innerRailMesh.castShadow = true;
     group.add(innerRailMesh);
 
@@ -522,14 +535,16 @@ function createCurvedTrack(group, type) {
         0
     );
     const outerRailPoints = outerRailCurve.getPoints(segments);
-    const outerRailShape = new THREE.TubeGeometry(
-        new THREE.CatmullRomCurve3(outerRailPoints.map(p => new THREE.Vector3(p.x, SLEEPER_HEIGHT + RAIL_HEIGHT / 2, p.y))),
-        segments,
-        0.05,
-        8,
-        false
+    const outerRailPath = new THREE.CatmullRomCurve3(
+        outerRailPoints.map(p => new THREE.Vector3(p.x, SLEEPER_HEIGHT + RAIL_HEIGHT / 2, p.y))
     );
-    const outerRailMesh = new THREE.Mesh(outerRailShape, railMaterial);
+
+    const outerRailGeometry = new THREE.ExtrudeGeometry(railCrossSection, {
+        steps: segments,
+        bevelEnabled: false,
+        extrudePath: outerRailPath
+    });
+    const outerRailMesh = new THREE.Mesh(outerRailGeometry, railMaterial);
     outerRailMesh.castShadow = true;
     group.add(outerRailMesh);
 }
