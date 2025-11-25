@@ -831,9 +831,9 @@ function createLevelCrossing(group, horizontal) {
         group.add(lightRight2Back);
         lights.push(lightRight2Back);
     } else {
-        // Vertical orientation (top pole moved farther up, opposite to arm direction)
+        // Vertical orientation (track runs vertically)
         const poleTop = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8), poleMaterial);
-        poleTop.position.set(-0.9, 0.6, -1.2);
+        poleTop.position.set(-0.9, 0.6, -1.0);
         poleTop.castShadow = true;
         group.add(poleTop);
 
@@ -849,14 +849,15 @@ function createLevelCrossing(group, horizontal) {
         signBorder2.rotation.z = -Math.PI / 4;
         signBorder2.position.z = -0.01;
         crossbuckTop.add(signBorder1, signBorder2, signBoard1, signBoard2);
-        crossbuckTop.position.set(-0.9, 0.9, -1.2);
+        crossbuckTop.rotation.y = Math.PI / 2; // Rotate to face the road in vertical orientation
+        crossbuckTop.position.set(-0.9, 0.9, -1.0);
         group.add(crossbuckTop);
 
         const lightBoxTop = new THREE.Mesh(
             new THREE.CylinderGeometry(0.08, 0.08, 0.25, 8),
             blackMaterial
         );
-        lightBoxTop.position.set(-0.9, 1.15, -1.2);
+        lightBoxTop.position.set(-0.9, 1.15, -1.0);
         group.add(lightBoxTop);
 
         // Top pole lights - facing track side
@@ -868,7 +869,7 @@ function createLevelCrossing(group, horizontal) {
                 emissiveIntensity: 0
             })
         );
-        lightTop1Front.position.set(-0.82, 1.22, -1.2);
+        lightTop1Front.position.set(-0.82, 1.22, -1.0);
         lightTop1Front.rotation.y = Math.PI / 2;
         group.add(lightTop1Front);
         lights.push(lightTop1Front);
@@ -881,7 +882,7 @@ function createLevelCrossing(group, horizontal) {
                 emissiveIntensity: 0
             })
         );
-        lightTop2Front.position.set(-0.82, 1.08, -1.2);
+        lightTop2Front.position.set(-0.82, 1.08, -1.0);
         lightTop2Front.rotation.y = Math.PI / 2;
         group.add(lightTop2Front);
         lights.push(lightTop2Front);
@@ -895,7 +896,7 @@ function createLevelCrossing(group, horizontal) {
                 emissiveIntensity: 0
             })
         );
-        lightTop1Back.position.set(-0.98, 1.22, -1.2);
+        lightTop1Back.position.set(-0.98, 1.22, -1.0);
         lightTop1Back.rotation.y = -Math.PI / 2;
         group.add(lightTop1Back);
         lights.push(lightTop1Back);
@@ -908,21 +909,22 @@ function createLevelCrossing(group, horizontal) {
                 emissiveIntensity: 0
             })
         );
-        lightTop2Back.position.set(-0.98, 1.08, -1.2);
+        lightTop2Back.position.set(-0.98, 1.08, -1.0);
         lightTop2Back.rotation.y = -Math.PI / 2;
         group.add(lightTop2Back);
         lights.push(lightTop2Back);
 
         const poleBottom = poleTop.clone();
-        poleBottom.position.set(0.9, 0.6, -1.2);
+        poleBottom.position.set(0.9, 0.6, 1.0);
         group.add(poleBottom);
 
         const crossbuckBottom = crossbuckTop.clone();
-        crossbuckBottom.position.set(0.9, 0.9, -1.2);
+        crossbuckBottom.rotation.y = Math.PI / 2; // Rotate to face the road in vertical orientation
+        crossbuckBottom.position.set(0.9, 0.9, 1.0);
         group.add(crossbuckBottom);
 
         const lightBoxBottom = lightBoxTop.clone();
-        lightBoxBottom.position.set(0.9, 1.15, -1.2);
+        lightBoxBottom.position.set(0.9, 1.15, 1.0);
         group.add(lightBoxBottom);
 
         // Bottom pole lights - facing track side
@@ -934,7 +936,7 @@ function createLevelCrossing(group, horizontal) {
                 emissiveIntensity: 0
             })
         );
-        lightBottom1Front.position.set(0.82, 1.22, -1.2);
+        lightBottom1Front.position.set(0.82, 1.22, 1.0);
         lightBottom1Front.rotation.y = -Math.PI / 2;
         group.add(lightBottom1Front);
         lights.push(lightBottom1Front);
@@ -947,7 +949,7 @@ function createLevelCrossing(group, horizontal) {
                 emissiveIntensity: 0
             })
         );
-        lightBottom2Front.position.set(0.82, 1.08, -1.2);
+        lightBottom2Front.position.set(0.82, 1.08, 1.0);
         lightBottom2Front.rotation.y = -Math.PI / 2;
         group.add(lightBottom2Front);
         lights.push(lightBottom2Front);
@@ -961,7 +963,7 @@ function createLevelCrossing(group, horizontal) {
                 emissiveIntensity: 0
             })
         );
-        lightBottom1Back.position.set(0.98, 1.22, -1.2);
+        lightBottom1Back.position.set(0.98, 1.22, 1.0);
         lightBottom1Back.rotation.y = Math.PI / 2;
         group.add(lightBottom1Back);
         lights.push(lightBottom1Back);
@@ -974,7 +976,7 @@ function createLevelCrossing(group, horizontal) {
                 emissiveIntensity: 0
             })
         );
-        lightBottom2Back.position.set(0.98, 1.08, -1.2);
+        lightBottom2Back.position.set(0.98, 1.08, 1.0);
         lightBottom2Back.rotation.y = Math.PI / 2;
         group.add(lightBottom2Back);
         lights.push(lightBottom2Back);
@@ -1038,48 +1040,55 @@ function createLevelCrossing(group, horizontal) {
         group.add(armRightGroup);
         arms.push(armRightGroup);
     } else {
-        // Top side arm
+        // Top side arm (vertical orientation means track runs vertically)
+        // Wrap in a parent group to apply 90-degree rotation to the entire assembly
+        const armTopWrapper = new THREE.Group();
         const armTopGroup = new THREE.Group();
-        const armTopBar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 1.2), barrierArmMaterial);
-        armTopBar.position.set(0, 0, 0.6);
+        const armTopBar = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.08), barrierArmMaterial);
+        armTopBar.position.set(0.6, 0, 0);
 
         for (let i = 0; i < 4; i++) {
             const stripe = new THREE.Mesh(
-                new THREE.BoxGeometry(0.081, 0.061, 0.15),
+                new THREE.BoxGeometry(0.15, 0.061, 0.081),
                 barrierRedStripeMaterial
             );
-            stripe.position.set(0, 0, 0.2 + i * 0.28);
+            stripe.position.set(0.2 + i * 0.28, 0, 0);
             armTopGroup.add(stripe);
         }
 
         armTopGroup.add(armTopBar);
-        armTopGroup.position.set(-0.9, 0.7, -1.2);
         armTopGroup.rotation.z = Math.PI / 2; // Start in up position (vertical)
         armTopGroup.userData.upRotation = Math.PI / 2; // Up position (vertical)
-        armTopGroup.userData.horizontalRotation = 0; // Horizontal pointing down (train present)
-        group.add(armTopGroup);
+        armTopGroup.userData.horizontalRotation = 0; // Horizontal pointing right (train present)
+        armTopWrapper.add(armTopGroup);
+        armTopWrapper.position.set(-0.9, 0.7, -1.0);
+        armTopWrapper.rotation.y = -Math.PI / 2; // Rotate entire assembly 90 degrees
+        group.add(armTopWrapper);
         arms.push(armTopGroup);
 
         // Bottom side arm
+        const armBottomWrapper = new THREE.Group();
         const armBottomGroup = new THREE.Group();
-        const armBottomBar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 1.2), barrierArmMaterial);
-        armBottomBar.position.set(0, 0, 0.6);
+        const armBottomBar = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.08), barrierArmMaterial);
+        armBottomBar.position.set(0.6, 0, 0);
 
         for (let i = 0; i < 4; i++) {
             const stripe = new THREE.Mesh(
-                new THREE.BoxGeometry(0.081, 0.061, 0.15),
+                new THREE.BoxGeometry(0.15, 0.061, 0.081),
                 barrierRedStripeMaterial
             );
-            stripe.position.set(0, 0, 0.2 + i * 0.28);
+            stripe.position.set(0.2 + i * 0.28, 0, 0);
             armBottomGroup.add(stripe);
         }
 
         armBottomGroup.add(armBottomBar);
-        armBottomGroup.position.set(0.9, 0.7, -1.2);
         armBottomGroup.rotation.z = Math.PI / 2; // Start in up position (vertical)
         armBottomGroup.userData.upRotation = Math.PI / 2; // Up position (vertical)
-        armBottomGroup.userData.horizontalRotation = Math.PI; // Horizontal pointing up (train present, opposite direction)
-        group.add(armBottomGroup);
+        armBottomGroup.userData.horizontalRotation = Math.PI; // Horizontal pointing left (train present, opposite direction)
+        armBottomWrapper.add(armBottomGroup);
+        armBottomWrapper.position.set(0.9, 0.7, 1.0);
+        armBottomWrapper.rotation.y = -Math.PI / 2; // Rotate entire assembly 90 degrees
+        group.add(armBottomWrapper);
         arms.push(armBottomGroup);
     }
 
