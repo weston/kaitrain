@@ -982,26 +982,26 @@ function placeTrain(row, col) {
 
     // Determine initial direction based on track type
     let initialDir = DIR.RIGHT;
-    let initialEnterDir = DIR.LEFT; // Opposite of initial dir
+    let initialEnterDir = DIR.RIGHT; // Same as travel direction
     if (cell.trackType === 'straight-v') {
         initialDir = DIR.DOWN;
-        initialEnterDir = DIR.UP;
+        initialEnterDir = DIR.DOWN;
     } else if (cell.trackType.startsWith('curve-')) {
-        // For curves, pick a valid enter direction
-        // curve-tl accepts DOWN or RIGHT, let's use DOWN
-        // curve-tr accepts LEFT or DOWN, let's use DOWN
-        // curve-bl accepts UP or RIGHT, let's use UP
-        // curve-br accepts LEFT or UP, let's use UP
+        // For curves, enterDir is the direction of travel at entry
         if (cell.trackType === 'curve-tl') {
+            // entering from TOP, going DOWN -> LEFT
             initialEnterDir = DIR.DOWN;
-            initialDir = DIR.LEFT; // EXIT direction
+            initialDir = DIR.LEFT;
         } else if (cell.trackType === 'curve-tr') {
+            // entering from TOP, going DOWN -> RIGHT
             initialEnterDir = DIR.DOWN;
             initialDir = DIR.RIGHT;
         } else if (cell.trackType === 'curve-bl') {
+            // entering from BOTTOM, going UP -> LEFT
             initialEnterDir = DIR.UP;
             initialDir = DIR.LEFT;
         } else if (cell.trackType === 'curve-br') {
+            // entering from BOTTOM, going UP -> RIGHT
             initialEnterDir = DIR.UP;
             initialDir = DIR.RIGHT;
         }
@@ -1082,7 +1082,7 @@ function moveTrainToNextCell(train) {
     const cell = grid[train.row][train.col];
     const trackType = cell.trackType;
 
-    // Determine next state using enterDir
+    // Determine next state using enterDir (direction of travel)
     const next = getNextState(train.row, train.col, train.enterDir, trackType);
 
     if (!next) {
@@ -1101,36 +1101,41 @@ function moveTrainToNextCell(train) {
     // Move train and update both dir and enterDir
     train.row = next.row;
     train.col = next.col;
-    train.dir = next.exitDir;
-    train.enterDir = next.nextEnterDir;
+    train.dir = next.exitDir;         // direction of travel leaving this cell
+    train.enterDir = next.nextEnterDir; // direction of travel entering the new cell (same as exitDir)
 }
 
-// New connectivity logic using enterDir
+// New connectivity logic using enterDir as direction of travel
 function getNextState(row, col, enterDir, trackType) {
     // Returns { row, col, exitDir, nextEnterDir } or null
+    // enterDir is the direction of travel when entering this cell
 
     let exitDir = null;
     let nextRow = row;
     let nextCol = col;
 
     if (trackType === 'straight-h') {
-        if (enterDir === DIR.LEFT) {
+        // Move straight horizontally: keep direction
+        if (enterDir === DIR.RIGHT) {
             exitDir = DIR.RIGHT;
             nextCol = col + 1;
-        } else if (enterDir === DIR.RIGHT) {
+        } else if (enterDir === DIR.LEFT) {
             exitDir = DIR.LEFT;
             nextCol = col - 1;
         }
     } else if (trackType === 'straight-v') {
-        if (enterDir === DIR.UP) {
+        // Move straight vertically: keep direction
+        if (enterDir === DIR.DOWN) {
             exitDir = DIR.DOWN;
             nextRow = row + 1;
-        } else if (enterDir === DIR.DOWN) {
+        } else if (enterDir === DIR.UP) {
             exitDir = DIR.UP;
             nextRow = row - 1;
         }
     } else if (trackType === 'curve-tl') {
-        // Connectivity: DOWN -> LEFT, RIGHT -> UP
+        // Geometry connectivity (direction of travel):
+        // TOP -> LEFT: DOWN -> LEFT
+        // LEFT -> TOP: RIGHT -> UP
         if (enterDir === DIR.DOWN) {
             exitDir = DIR.LEFT;
             nextCol = col - 1;
@@ -1139,7 +1144,8 @@ function getNextState(row, col, enterDir, trackType) {
             nextRow = row - 1;
         }
     } else if (trackType === 'curve-tr') {
-        // Connectivity: LEFT -> UP, DOWN -> RIGHT
+        // RIGHT -> TOP: LEFT -> UP
+        // TOP -> RIGHT: DOWN -> RIGHT
         if (enterDir === DIR.LEFT) {
             exitDir = DIR.UP;
             nextRow = row - 1;
@@ -1148,22 +1154,24 @@ function getNextState(row, col, enterDir, trackType) {
             nextCol = col + 1;
         }
     } else if (trackType === 'curve-bl') {
-        // Connectivity: UP -> LEFT, RIGHT -> DOWN
-        if (enterDir === DIR.UP) {
-            exitDir = DIR.LEFT;
-            nextCol = col - 1;
-        } else if (enterDir === DIR.RIGHT) {
-            exitDir = DIR.DOWN;
-            nextRow = row + 1;
-        }
-    } else if (trackType === 'curve-br') {
-        // Connectivity: LEFT -> DOWN, UP -> RIGHT
-        if (enterDir === DIR.LEFT) {
+        // LEFT -> BOTTOM: RIGHT -> DOWN
+        // BOTTOM -> LEFT: UP -> LEFT
+        if (enterDir === DIR.RIGHT) {
             exitDir = DIR.DOWN;
             nextRow = row + 1;
         } else if (enterDir === DIR.UP) {
+            exitDir = DIR.LEFT;
+            nextCol = col - 1;
+        }
+    } else if (trackType === 'curve-br') {
+        // BOTTOM -> RIGHT: UP -> RIGHT
+        // RIGHT -> BOTTOM: LEFT -> DOWN
+        if (enterDir === DIR.UP) {
             exitDir = DIR.RIGHT;
             nextCol = col + 1;
+        } else if (enterDir === DIR.LEFT) {
+            exitDir = DIR.DOWN;
+            nextRow = row + 1;
         }
     }
 
@@ -1171,7 +1179,9 @@ function getNextState(row, col, enterDir, trackType) {
         return null; // Invalid enterDir for this track type
     }
 
-    const nextEnterDir = getOppositeDirection(exitDir);
+    // IMPORTANT: nextEnterDir is the SAME as exitDir
+    // because the train continues in that direction into the next cell
+    const nextEnterDir = exitDir;
 
     return { row: nextRow, col: nextCol, exitDir, nextEnterDir };
 }
@@ -1264,10 +1274,17 @@ function updateTrainPosition(train) {
             }
         }
 
-        const currentAngle = startAngle + (endAngle - startAngle) * train.progress;
-        x = centerX + R * Math.cos(currentAngle);
-        z = centerZ + R * Math.sin(currentAngle);
-        rotation = currentAngle + Math.PI / 2;
+        // Safety check: if angles not set, stay at cell center
+        if (startAngle === undefined || endAngle === undefined) {
+            x = cellCenterX;
+            z = cellCenterZ;
+            rotation = getRotationForDirection(train.dir);
+        } else {
+            const currentAngle = startAngle + (endAngle - startAngle) * train.progress;
+            x = centerX + R * Math.cos(currentAngle);
+            z = centerZ + R * Math.sin(currentAngle);
+            rotation = currentAngle + Math.PI / 2;
+        }
     }
 
     train.mesh.position.x = x;
