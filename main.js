@@ -2425,7 +2425,7 @@ function initAudio() {
     // Load steam engine sound
     steamEngineSound = new Audio('./sounds/steamengine.mp3');
     steamEngineSound.loop = true;
-    steamEngineSound.volume = 0.5;
+    steamEngineSound.volume = 0.1;
 
     // Load crossing ding sound
     dingSound = new Audio('./sounds/dingding.mp3');
