@@ -1052,6 +1052,14 @@ function getOppositeDirection(dir) {
     return (dir + 2) % 4;
 }
 
+// Interpolate between two angles taking the shortest path
+function lerpAngleShortest(a, b, t) {
+    let diff = b - a;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    return a + diff * t;
+}
+
 // ============================================================================
 // TRAIN MOVEMENT
 // ============================================================================
@@ -1283,7 +1291,11 @@ function updateTrainPosition(train) {
             const currentAngle = startAngle + (endAngle - startAngle) * train.progress;
             x = centerX + R * Math.cos(currentAngle);
             z = centerZ + R * Math.sin(currentAngle);
-            rotation = currentAngle + Math.PI / 2;
+
+            // Rotate smoothly from entry direction to exit direction
+            const startRot = getRotationForDirection(train.enterDir);
+            const endRot = getRotationForDirection(train.dir);  // dir is exitDir for this cell
+            rotation = lerpAngleShortest(startRot, endRot, train.progress);
         }
     }
 
