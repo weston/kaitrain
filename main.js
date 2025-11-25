@@ -27,7 +27,7 @@ const DIR = {
 let scene, camera, renderer, controls;
 let groundPlane, gridHelper;
 let grid = []; // grid[row][col] = { kind, trackType, mesh, ... }
-let trains = []; // { row, col, dir, enterDir, engineType, cars, mesh, speed, progress, moving }
+let trains = []; // { row, col, dir, enterDir, engineType, cars, mesh, speed, progress, moving, stopped }
 let mode = 'track'; // 'track' or 'train'
 let selectedType = 'straight'; // 'straight' or 'curve'
 let deleteMode = false; // true when delete tool is selected
@@ -571,33 +571,406 @@ function createTrainMesh(engineType, cars = []) {
 function createSteamEngine() {
     const group = new THREE.Group();
 
-    // Main body (dark red)
-    const bodyGeometry = new THREE.BoxGeometry(0.5, 0.4, 0.8);
-    const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x8B0000 });
-    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.position.y = 0.3;
-    body.castShadow = true;
-    group.add(body);
+    const blackMetal = new THREE.MeshStandardMaterial({
+        color: 0x141414,
+        metalness: 0.9,
+        roughness: 0.35
+    });
+    const darkSteel = new THREE.MeshStandardMaterial({
+        color: 0x22262a,
+        metalness: 0.85,
+        roughness: 0.3
+    });
+    const cabPaint = new THREE.MeshStandardMaterial({
+        color: 0x303843,
+        metalness: 0.45,
+        roughness: 0.7
+    });
+    const brass = new THREE.MeshStandardMaterial({
+        color: 0xC79A4A,
+        metalness: 1.0,
+        roughness: 0.25
+    });
+    const redTrim = new THREE.MeshStandardMaterial({
+        color: 0x7a1010,
+        metalness: 0.55,
+        roughness: 0.55
+    });
+    const glass = new THREE.MeshStandardMaterial({
+        color: 0x9fc3e8,
+        metalness: 1.0,
+        roughness: 0.08,
+        transparent: true,
+        opacity: 0.7
+    });
 
-    // Boiler (round front)
-    const boilerGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.4, 12);
-    const boilerMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
-    const boiler = new THREE.Mesh(boilerGeometry, boilerMaterial);
-    boiler.position.set(0, 0.3, 0.5);
-    boiler.rotation.x = Math.PI / 2;
+    const halfGauge = TRACK_WIDTH / 2;
+    const wheelX = halfGauge + 0.03;
+
+    const frameGeom = new THREE.BoxGeometry(0.46, 0.07, 1.6);
+    const frame = new THREE.Mesh(frameGeom, darkSteel);
+    frame.position.set(0, 0.13, 0.05);
+    frame.castShadow = true;
+    group.add(frame);
+
+    const bufferGeom = new THREE.BoxGeometry(0.46, 0.16, 0.06);
+    const buffer = new THREE.Mesh(bufferGeom, blackMetal);
+    buffer.position.set(0, 0.16, 0.88);
+    buffer.castShadow = true;
+    group.add(buffer);
+
+    const rearBuffer = buffer.clone();
+    rearBuffer.position.z = -0.76;
+    group.add(rearBuffer);
+
+    const frameSideGeom = new THREE.BoxGeometry(0.04, 0.12, 1.5);
+    const leftFrameSide = new THREE.Mesh(frameSideGeom, darkSteel);
+    leftFrameSide.position.set(-wheelX - 0.03, 0.16, 0.05);
+    group.add(leftFrameSide);
+    const rightFrameSide = leftFrameSide.clone();
+    rightFrameSide.position.x = wheelX + 0.03;
+    group.add(rightFrameSide);
+
+    const boilerGeom = new THREE.CylinderGeometry(0.19, 0.19, 0.95, 24);
+    const boiler = new THREE.Mesh(boilerGeom, blackMetal);
+    boiler.rotation.z = Math.PI / 2;
+    boiler.position.set(0, 0.38, 0.18);
     boiler.castShadow = true;
     group.add(boiler);
 
-    // Chimney
-    const chimneyGeometry = new THREE.CylinderGeometry(0.08, 0.1, 0.3, 8);
-    const chimneyMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
-    const chimney = new THREE.Mesh(chimneyGeometry, chimneyMaterial);
-    chimney.position.set(0, 0.65, 0.2);
-    chimney.castShadow = true;
-    group.add(chimney);
+    const bandGeom = new THREE.TorusGeometry(0.19, 0.007, 12, 32);
+    [-0.22, 0.02, 0.28].forEach(off => {
+        const band = new THREE.Mesh(bandGeom, brass);
+        band.rotation.y = Math.PI / 2;
+        band.position.set(0, 0.38, 0.18 + off);
+        group.add(band);
+    });
 
-    // Wheels
-    addWheels(group);
+    const steamPipeGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.38, 8);
+    const leftSteamPipe = new THREE.Mesh(steamPipeGeom, darkSteel);
+    leftSteamPipe.rotation.x = Math.PI / 2;
+    leftSteamPipe.position.set(-0.16, 0.36, 0.40);
+    group.add(leftSteamPipe);
+    const rightSteamPipe = leftSteamPipe.clone();
+    rightSteamPipe.position.x = 0.16;
+    group.add(rightSteamPipe);
+
+    const smokeGeom = new THREE.CylinderGeometry(0.19, 0.20, 0.24, 24);
+    const smokebox = new THREE.Mesh(smokeGeom, darkSteel);
+    smokebox.rotation.z = Math.PI / 2;
+    smokebox.position.set(0, 0.38, 0.70);
+    smokebox.castShadow = true;
+    group.add(smokebox);
+
+    const doorGeom = new THREE.CylinderGeometry(0.18, 0.18, 0.025, 24);
+    const door = new THREE.Mesh(doorGeom, darkSteel);
+    door.rotation.z = Math.PI / 2;
+    door.position.set(0, 0.38, 0.83);
+    group.add(door);
+
+    const ringGeom = new THREE.TorusGeometry(0.18, 0.01, 16, 32);
+    const ring = new THREE.Mesh(ringGeom, brass);
+    ring.rotation.y = Math.PI / 2;
+    ring.position.set(0, 0.38, 0.835);
+    group.add(ring);
+
+    const hingeGeom = new THREE.BoxGeometry(0.02, 0.12, 0.01);
+    const hinge = new THREE.Mesh(hingeGeom, blackMetal);
+    hinge.position.set(0, 0.38, 0.845);
+    group.add(hinge);
+
+    const handleGeom = new THREE.TorusGeometry(0.05, 0.007, 8, 16, 0, Math.PI);
+    const handle = new THREE.Mesh(handleGeom, brass);
+    handle.rotation.y = Math.PI / 2;
+    handle.rotation.x = Math.PI;
+    handle.position.set(0, 0.34, 0.855);
+    group.add(handle);
+
+    const rivetGeom = new THREE.SphereGeometry(0.006, 6, 6);
+    for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        const x = Math.cos(a) * 0.175;
+        const y = Math.sin(a) * 0.175;
+        const rivet = new THREE.Mesh(rivetGeom, darkSteel);
+        rivet.position.set(x, 0.38 + y, 0.835);
+        group.add(rivet);
+    }
+
+    const stackGeom = new THREE.CylinderGeometry(0.08, 0.13, 0.34, 20);
+    const stack = new THREE.Mesh(stackGeom, blackMetal);
+    stack.position.set(0, 0.68, 0.48);
+    stack.castShadow = true;
+    group.add(stack);
+
+    const stackLipGeom = new THREE.CylinderGeometry(0.14, 0.08, 0.04, 20);
+    const stackLip = new THREE.Mesh(stackLipGeom, blackMetal);
+    stackLip.position.set(0, 0.87, 0.48);
+    group.add(stackLip);
+
+    const innerLipGeom = new THREE.CylinderGeometry(0.11, 0.11, 0.015, 20);
+    const innerLip = new THREE.Mesh(innerLipGeom, darkSteel);
+    innerLip.position.set(0, 0.885, 0.48);
+    group.add(innerLip);
+
+    const steamDomeGeom = new THREE.SphereGeometry(0.11, 20, 16);
+    const steamDome = new THREE.Mesh(steamDomeGeom, brass);
+    steamDome.position.set(0, 0.54, 0.05);
+    steamDome.castShadow = true;
+    group.add(steamDome);
+
+    const sandDomeGeom = new THREE.SphereGeometry(0.095, 20, 16);
+    const sandDome = new THREE.Mesh(sandDomeGeom, darkSteel);
+    sandDome.position.set(0, 0.52, 0.28);
+    sandDome.castShadow = true;
+    group.add(sandDome);
+
+    const whistleGeom = new THREE.CylinderGeometry(0.015, 0.02, 0.14, 8);
+    const whistle = new THREE.Mesh(whistleGeom, brass);
+    whistle.position.set(-0.09, 0.62, 0.02);
+    group.add(whistle);
+
+    const bellBaseGeom = new THREE.CylinderGeometry(0.02, 0.02, 0.05, 8);
+    const bellBase = new THREE.Mesh(bellBaseGeom, darkSteel);
+    bellBase.position.set(0.10, 0.60, 0.04);
+    group.add(bellBase);
+
+    const bellGeom = new THREE.ConeGeometry(0.04, 0.08, 12);
+    const bell = new THREE.Mesh(bellGeom, brass);
+    bell.position.set(0.10, 0.66, 0.04);
+    group.add(bell);
+
+    const bellYokeGeom = new THREE.BoxGeometry(0.09, 0.01, 0.02);
+    const bellYoke = new THREE.Mesh(bellYokeGeom, darkSteel);
+    bellYoke.position.set(0.10, 0.66, 0.04);
+    group.add(bellYoke);
+
+    const tankGeom = new THREE.BoxGeometry(0.20, 0.26, 0.70);
+    const leftTank = new THREE.Mesh(tankGeom, cabPaint);
+    leftTank.position.set(-0.25, 0.25, 0.10);
+    leftTank.castShadow = true;
+    group.add(leftTank);
+
+    const rightTank = leftTank.clone();
+    rightTank.position.x = 0.25;
+    group.add(rightTank);
+
+    const tankTopGeom = new THREE.BoxGeometry(0.22, 0.02, 0.72);
+    const leftTankTop = new THREE.Mesh(tankTopGeom, darkSteel);
+    leftTankTop.position.set(-0.25, 0.39, 0.10);
+    group.add(leftTankTop);
+    const rightTankTop = leftTankTop.clone();
+    rightTankTop.position.x = 0.25;
+    group.add(rightTankTop);
+
+    const cabBodyGeom = new THREE.BoxGeometry(0.48, 0.34, 0.42);
+    const cabBody = new THREE.Mesh(cabBodyGeom, cabPaint);
+    cabBody.position.set(0, 0.40, -0.52);
+    cabBody.castShadow = true;
+    group.add(cabBody);
+
+    const cabRoofGeom = new THREE.BoxGeometry(0.56, 0.04, 0.50);
+    const cabRoof = new THREE.Mesh(cabRoofGeom, blackMetal);
+    cabRoof.position.set(0, 0.62, -0.52);
+    cabRoof.castShadow = true;
+    group.add(cabRoof);
+
+    const roofRibGeom = new THREE.BoxGeometry(0.02, 0.015, 0.50);
+    [-0.22, 0, 0.22].forEach(x => {
+        const rib = new THREE.Mesh(roofRibGeom, darkSteel);
+        rib.position.set(x, 0.63, -0.52);
+        group.add(rib);
+    });
+
+    const sideWinGeom = new THREE.BoxGeometry(0.02, 0.18, 0.22);
+    const leftWin = new THREE.Mesh(sideWinGeom, glass);
+    leftWin.position.set(-0.25, 0.43, -0.50);
+    group.add(leftWin);
+    const rightWin = leftWin.clone();
+    rightWin.position.x = 0.25;
+    group.add(rightWin);
+
+    const rearWinGeom = new THREE.BoxGeometry(0.26, 0.18, 0.02);
+    const rearWin = new THREE.Mesh(rearWinGeom, glass);
+    rearWin.position.set(0, 0.43, -0.74);
+    group.add(rearWin);
+
+    const cabPanelGeom = new THREE.BoxGeometry(0.32, 0.20, 0.01);
+    const cabPanel = new THREE.Mesh(cabPanelGeom, new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.3, roughness: 0.9 }));
+    cabPanel.position.set(0, 0.38, -0.33);
+    group.add(cabPanel);
+
+    const gaugeGeom = new THREE.CircleGeometry(0.025, 12);
+    for (let i = -0.06; i <= 0.06; i += 0.06) {
+        const gauge = new THREE.Mesh(gaugeGeom, glass);
+        gauge.rotation.y = Math.PI;
+        gauge.position.set(i, 0.42, -0.325);
+        group.add(gauge);
+    }
+
+    const seatGeom = new THREE.BoxGeometry(0.14, 0.06, 0.12);
+    const seat = new THREE.Mesh(seatGeom, darkSteel);
+    seat.position.set(-0.10, 0.25, -0.58);
+    group.add(seat);
+    const seat2 = seat.clone();
+    seat2.position.x = 0.10;
+    group.add(seat2);
+
+    const lampBoxGeom = new THREE.BoxGeometry(0.16, 0.16, 0.16);
+    const lampBox = new THREE.Mesh(lampBoxGeom, blackMetal);
+    lampBox.position.set(0, 0.52, 0.86);
+    lampBox.castShadow = true;
+    group.add(lampBox);
+
+    const lampTrimGeom = new THREE.BoxGeometry(0.18, 0.02, 0.02);
+    const lampTrim = new THREE.Mesh(lampTrimGeom, brass);
+    lampTrim.position.set(0, 0.60, 0.86);
+    group.add(lampTrim);
+
+    const lampLensGeom = new THREE.CircleGeometry(0.07, 24);
+    const lampLens = new THREE.Mesh(lampLensGeom, glass);
+    lampLens.rotation.x = -Math.PI / 2;
+    lampLens.position.set(0, 0.52, 0.94);
+    group.add(lampLens);
+
+    const lampBracketGeom = new THREE.BoxGeometry(0.18, 0.03, 0.04);
+    const lampBracket = new THREE.Mesh(lampBracketGeom, darkSteel);
+    lampBracket.position.set(0, 0.48, 0.83);
+    group.add(lampBracket);
+
+    const pilotGeom = new THREE.BoxGeometry(0.46, 0.12, 0.20);
+    const pilot = new THREE.Mesh(pilotGeom, blackMetal);
+    pilot.position.set(0, 0.09, 0.98);
+    pilot.castShadow = true;
+    group.add(pilot);
+
+    const slatGeom = new THREE.BoxGeometry(0.40, 0.013, 0.02);
+    for (let i = 0; i < 5; i++) {
+        const slat = new THREE.Mesh(slatGeom, darkSteel);
+        slat.position.set(0, 0.03 + i * 0.02, 1.05);
+        group.add(slat);
+    }
+
+    const pilotSideGeom = new THREE.BoxGeometry(0.02, 0.16, 0.20);
+    const pilotSideL = new THREE.Mesh(pilotSideGeom, darkSteel);
+    pilotSideL.position.set(-0.23, 0.10, 0.98);
+    group.add(pilotSideL);
+    const pilotSideR = pilotSideL.clone();
+    pilotSideR.position.x = 0.23;
+    group.add(pilotSideR);
+
+    const couplerGeom = new THREE.BoxGeometry(0.12, 0.05, 0.10);
+    const frontCoupler = new THREE.Mesh(couplerGeom, darkSteel);
+    frontCoupler.position.set(0, 0.12, 1.07);
+    group.add(frontCoupler);
+    const rearCoupler = frontCoupler.clone();
+    rearCoupler.position.z = -0.87;
+    group.add(rearCoupler);
+
+    const driverGeom = new THREE.CylinderGeometry(0.18, 0.18, 0.06, 20);
+    const driverZs = [0.00, -0.25, -0.50];
+    driverZs.forEach(z => {
+        const left = new THREE.Mesh(driverGeom, blackMetal);
+        left.position.set(-wheelX, 0.19, z);
+        left.rotation.z = Math.PI / 2;
+        left.castShadow = true;
+        group.add(left);
+
+        const right = left.clone();
+        right.position.x = wheelX;
+        group.add(right);
+
+        const hubGeom = new THREE.CylinderGeometry(0.045, 0.045, 0.065, 12);
+        const leftHub = new THREE.Mesh(hubGeom, brass);
+        leftHub.position.set(-wheelX, 0.19, z);
+        leftHub.rotation.z = Math.PI / 2;
+        group.add(leftHub);
+        const rightHub = leftHub.clone();
+        rightHub.position.x = wheelX;
+        group.add(rightHub);
+
+        const spokeGeom = new THREE.BoxGeometry(0.015, 0.12, 0.012);
+        for (let i = 0; i < 6; i++) {
+            const angle = i * (Math.PI / 3);
+            const r = 0.11;
+            const sx = Math.cos(angle) * r;
+            const sy = Math.sin(angle) * r;
+
+            const spokeL = new THREE.Mesh(spokeGeom, darkSteel);
+            spokeL.position.set(-wheelX, 0.19, z);
+            spokeL.rotation.z = angle;
+            group.add(spokeL);
+
+            const spokeR = spokeL.clone();
+            spokeR.position.x = wheelX;
+            group.add(spokeR);
+        }
+    });
+
+    const leadGeom = new THREE.CylinderGeometry(0.12, 0.12, 0.05, 16);
+    [0, 1].forEach(i => {
+        const x = i === 0 ? -wheelX + 0.01 : wheelX - 0.01;
+        const w = new THREE.Mesh(leadGeom, blackMetal);
+        w.position.set(x, 0.16, 0.55);
+        w.rotation.z = Math.PI / 2;
+        w.castShadow = true;
+        group.add(w);
+    });
+
+    const rodGeom = new THREE.BoxGeometry(0.02, 0.02, 0.60);
+    const leftRod = new THREE.Mesh(rodGeom, darkSteel);
+    leftRod.position.set(-wheelX - 0.015, 0.22, -0.25);
+    group.add(leftRod);
+    const rightRod = leftRod.clone();
+    rightRod.position.x = wheelX + 0.015;
+    group.add(rightRod);
+
+    const hangGeom = new THREE.CylinderGeometry(0.01, 0.01, 0.16, 8);
+    const leftHang = new THREE.Mesh(hangGeom, darkSteel);
+    leftHang.rotation.x = Math.PI / 2;
+    leftHang.position.set(-wheelX - 0.015, 0.21, -0.25);
+    group.add(leftHang);
+    const rightHang = leftHang.clone();
+    rightHang.position.x = wheelX + 0.015;
+    group.add(rightHang);
+
+    const handrailGeom = new THREE.CylinderGeometry(0.01, 0.01, 0.92, 8);
+    const leftRail = new THREE.Mesh(handrailGeom, darkSteel);
+    leftRail.rotation.z = Math.PI / 2;
+    leftRail.position.set(-0.23, 0.44, 0.20);
+    group.add(leftRail);
+    const rightRail = leftRail.clone();
+    rightRail.position.x = 0.23;
+    group.add(rightRail);
+
+    const stanchGeom = new THREE.CylinderGeometry(0.008, 0.008, 0.06, 8);
+    [-0.15, 0.05, 0.25, 0.45].forEach(z => {
+        const sL = new THREE.Mesh(stanchGeom, darkSteel);
+        sL.position.set(-0.23, 0.41, z);
+        group.add(sL);
+        const sR = sL.clone();
+        sR.position.x = 0.23;
+        group.add(sR);
+    });
+
+    const airTankGeom = new THREE.CylinderGeometry(0.06, 0.06, 0.40, 16);
+    const airTank = new THREE.Mesh(airTankGeom, darkSteel);
+    airTank.rotation.z = Math.PI / 2;
+    airTank.position.set(0, 0.14, 0.18);
+    group.add(airTank);
+
+    const ladderSideGeom = new THREE.BoxGeometry(0.02, 0.30, 0.02);
+    const ladderRungGeom = new THREE.BoxGeometry(0.16, 0.01, 0.02);
+    const ladderLeftSide = new THREE.Mesh(ladderSideGeom, darkSteel);
+    ladderLeftSide.position.set(-0.22, 0.23, -0.78);
+    group.add(ladderLeftSide);
+    const ladderRightSide = ladderLeftSide.clone();
+    ladderRightSide.position.x = 0.22;
+    group.add(ladderRightSide);
+    [-0.10, -0.02, 0.06].forEach(yOff => {
+        const rung = new THREE.Mesh(ladderRungGeom, darkSteel);
+        rung.position.set(0, 0.25 + yOff, -0.78);
+        group.add(rung);
+    });
 
     return group;
 }
@@ -605,30 +978,147 @@ function createSteamEngine() {
 function createDieselEngine() {
     const group = new THREE.Group();
 
-    // Main body (orange/yellow)
-    const bodyGeometry = new THREE.BoxGeometry(0.6, 0.45, 0.8);
-    const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xFF8C00 });
+    const chassisGeometry = new THREE.BoxGeometry(0.7, 0.15, 0.95);
+    const chassisMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const chassis = new THREE.Mesh(chassisGeometry, chassisMaterial);
+    chassis.position.y = 0.15;
+    chassis.castShadow = true;
+    chassis.receiveShadow = true;
+    group.add(chassis);
+
+    const bodyGeometry = new THREE.BoxGeometry(0.6, 0.4, 0.8);
+    const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xFF9C20 });
     const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.position.y = 0.325;
+    body.position.y = 0.35;
     body.castShadow = true;
+    body.receiveShadow = true;
     group.add(body);
 
-    // Cab (darker top)
-    const cabGeometry = new THREE.BoxGeometry(0.6, 0.25, 0.4);
+    const cabGeometry = new THREE.BoxGeometry(0.4, 0.32, 0.45);
     const cabMaterial = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
     const cab = new THREE.Mesh(cabGeometry, cabMaterial);
-    cab.position.y = 0.575;
+    cab.position.set(0, 0.51, -0.05);
     cab.castShadow = true;
+    cab.receiveShadow = true;
     group.add(cab);
 
-    // Front window (blue)
-    const windowGeometry = new THREE.BoxGeometry(0.55, 0.2, 0.05);
-    const windowMaterial = new THREE.MeshLambertMaterial({ color: 0x87CEEB });
-    const window = new THREE.Mesh(windowGeometry, windowMaterial);
-    window.position.set(0, 0.575, 0.405);
-    group.add(window);
+    const frontWindowGeometry = new THREE.BoxGeometry(0.36, 0.18, 0.03);
+    const frontWindowMaterial = new THREE.MeshLambertMaterial({ color: 0x87CEEB });
+    const frontWindow = new THREE.Mesh(frontWindowGeometry, frontWindowMaterial);
+    frontWindow.position.set(0, 0.52, 0.44);
+    group.add(frontWindow);
 
-    // Wheels
+    const sideWindowGeometry = new THREE.BoxGeometry(0.12, 0.16, 0.03);
+    const sideWindowMaterial = new THREE.MeshLambertMaterial({ color: 0x6FB9E9 });
+
+    const leftSideWindow = new THREE.Mesh(sideWindowGeometry, sideWindowMaterial);
+    leftSideWindow.position.set(-0.22, 0.52, -0.05);
+    leftSideWindow.rotation.y = Math.PI / 2;
+    group.add(leftSideWindow);
+
+    const rightSideWindow = leftSideWindow.clone();
+    rightSideWindow.position.x = 0.22;
+    group.add(rightSideWindow);
+
+    const doorGeometry = new THREE.BoxGeometry(0.02, 0.26, 0.22);
+    const doorMaterial = new THREE.MeshLambertMaterial({ color: 0xE67A00 });
+
+    const leftDoor = new THREE.Mesh(doorGeometry, doorMaterial);
+    leftDoor.position.set(-0.31, 0.35, 0);
+    group.add(leftDoor);
+
+    const rightDoor = leftDoor.clone();
+    rightDoor.position.x = 0.31;
+    group.add(rightDoor);
+
+    const ventGeometry = new THREE.BoxGeometry(0.02, 0.14, 0.3);
+    const ventMaterial = new THREE.MeshLambertMaterial({ color: 0xCC6E00 });
+
+    for (let i = 0; i < 3; i++) {
+        const vent = new THREE.Mesh(ventGeometry, ventMaterial);
+        vent.position.set(-0.31, 0.42, -0.25 + i * 0.16);
+        group.add(vent);
+    }
+
+    const roofGeometry = new THREE.BoxGeometry(0.58, 0.07, 0.78);
+    const roofMaterial = new THREE.MeshLambertMaterial({ color: 0xF0A840 });
+    const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+    roof.position.y = 0.58;
+    group.add(roof);
+
+    const exhaustGeometry = new THREE.CylinderGeometry(0.035, 0.035, 0.18, 12);
+    const exhaustMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
+    const exhaust = new THREE.Mesh(exhaustGeometry, exhaustMaterial);
+    exhaust.position.set(-0.12, 0.70, -0.15);
+    exhaust.rotation.z = Math.PI / 2;
+    group.add(exhaust);
+
+    const exhaust2 = exhaust.clone();
+    exhaust2.position.z = 0.0;
+    group.add(exhaust2);
+
+    const lightGeometry = new THREE.CylinderGeometry(0.04, 0.04, 0.03, 12);
+    const lightMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFAA });
+
+    const frontLightLeft = new THREE.Mesh(lightGeometry, lightMaterial);
+    frontLightLeft.position.set(-0.12, 0.30, 0.51);
+    frontLightLeft.rotation.x = Math.PI / 2;
+    group.add(frontLightLeft);
+
+    const frontLightRight = frontLightLeft.clone();
+    frontLightRight.position.x = 0.12;
+    group.add(frontLightRight);
+
+    const rearLightLeft = frontLightLeft.clone();
+    rearLightLeft.position.set(-0.12, 0.30, -0.51);
+    group.add(rearLightLeft);
+
+    const rearLightRight = frontLightRight.clone();
+    rearLightRight.position.z = -0.51;
+    group.add(rearLightRight);
+
+    const railingGeometry = new THREE.BoxGeometry(0.02, 0.22, 0.7);
+    const railingMaterial = new THREE.MeshLambertMaterial({ color: 0xCCCCCC });
+
+    const leftRail = new THREE.Mesh(railingGeometry, railingMaterial);
+    leftRail.position.set(-0.36, 0.26, 0);
+    group.add(leftRail);
+
+    const rightRail = leftRail.clone();
+    rightRail.position.x = 0.36;
+    group.add(rightRail);
+
+    const bufferGeometry = new THREE.CylinderGeometry(0.06, 0.06, 0.04, 12);
+    const bufferMaterial = new THREE.MeshLambertMaterial({ color: 0x555555 });
+
+    const frontBufferLeft = new THREE.Mesh(bufferGeometry, bufferMaterial);
+    frontBufferLeft.position.set(-0.18, 0.18, 0.51);
+    frontBufferLeft.rotation.x = Math.PI / 2;
+    group.add(frontBufferLeft);
+
+    const frontBufferRight = frontBufferLeft.clone();
+    frontBufferRight.position.x = 0.18;
+    group.add(frontBufferRight);
+
+    const rearBufferLeft = frontBufferLeft.clone();
+    rearBufferLeft.position.z = -0.51;
+    group.add(rearBufferLeft);
+
+    const rearBufferRight = frontBufferRight.clone();
+    rearBufferRight.position.z = -0.51;
+    group.add(rearBufferRight);
+
+    const couplerGeometry = new THREE.BoxGeometry(0.08, 0.06, 0.08);
+    const couplerMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
+
+    const frontCoupler = new THREE.Mesh(couplerGeometry, couplerMaterial);
+    frontCoupler.position.set(0, 0.16, 0.55);
+    group.add(frontCoupler);
+
+    const rearCoupler = frontCoupler.clone();
+    rearCoupler.position.z = -0.55;
+    group.add(rearCoupler);
+
     addWheels(group);
 
     return group;
@@ -637,35 +1127,140 @@ function createDieselEngine() {
 function createBulletEngine() {
     const group = new THREE.Group();
 
-    // Streamlined body (white/blue)
-    const bodyGeometry = new THREE.BoxGeometry(0.55, 0.5, 0.9);
-    const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
-    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.position.y = 0.35;
-    body.castShadow = true;
-    group.add(body);
+    const lowerBodyGeometry = new THREE.BoxGeometry(0.55, 0.30, 0.9);
+    const lowerBodyMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+    const lowerBody = new THREE.Mesh(lowerBodyGeometry, lowerBodyMaterial);
+    lowerBody.position.y = 0.32;
+    lowerBody.castShadow = true;
+    lowerBody.receiveShadow = true;
+    group.add(lowerBody);
 
-    // Blue stripe
-    const stripeGeometry = new THREE.BoxGeometry(0.56, 0.15, 0.9);
+    const roofGeometry = new THREE.CylinderGeometry(0.28, 0.28, 0.9, 18, 1, true);
+    const roofMaterial = new THREE.MeshLambertMaterial({ color: 0xF5F5F5 });
+    const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+    roof.rotation.z = Math.PI / 2;
+    roof.position.y = 0.52;
+    group.add(roof);
+
+    const stripeGeometry = new THREE.BoxGeometry(0.56, 0.12, 0.9);
     const stripeMaterial = new THREE.MeshLambertMaterial({ color: 0x0066CC });
     const stripe = new THREE.Mesh(stripeGeometry, stripeMaterial);
-    stripe.position.y = 0.3;
+    stripe.position.y = 0.30;
     group.add(stripe);
 
-    // Pointed nose
-    const noseGeometry = new THREE.ConeGeometry(0.25, 0.4, 8);
+    const lowerStripeGeometry = new THREE.BoxGeometry(0.56, 0.06, 0.9);
+    const lowerStripeMaterial = new THREE.MeshLambertMaterial({ color: 0x004488 });
+    const lowerStripe = new THREE.Mesh(lowerStripeGeometry, lowerStripeMaterial);
+    lowerStripe.position.y = 0.21;
+    group.add(lowerStripe);
+
+    const noseGeometry = new THREE.ConeGeometry(0.275, 0.45, 20);
     const noseMaterial = new THREE.MeshLambertMaterial({ color: 0x0066CC });
     const nose = new THREE.Mesh(noseGeometry, noseMaterial);
-    nose.position.set(0, 0.35, 0.65);
+    nose.position.set(0, 0.38, 0.70);
     nose.rotation.x = Math.PI / 2;
     nose.castShadow = true;
     group.add(nose);
 
-    // Wheels
+    const noseCapGeometry = new THREE.SphereGeometry(0.12, 16, 12);
+    const noseCapMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+    const noseCap = new THREE.Mesh(noseCapGeometry, noseCapMaterial);
+    noseCap.position.set(0, 0.40, 0.89);
+    group.add(noseCap);
+
+    const frontWindowGeometry = new THREE.BoxGeometry(0.30, 0.16, 0.03);
+    const frontWindowMaterial = new THREE.MeshLambertMaterial({ color: 0x222233 });
+    const frontWindow = new THREE.Mesh(frontWindowGeometry, frontWindowMaterial);
+    frontWindow.position.set(0, 0.48, 0.80);
+    group.add(frontWindow);
+
+    const sideWindowGeometry = new THREE.BoxGeometry(0.06, 0.10, 0.02);
+    const sideWindowMaterial = new THREE.MeshLambertMaterial({ color: 0x2E3B61 });
+
+    const windowZPositions = [-0.30, -0.16, -0.02, 0.12, 0.26];
+    windowZPositions.forEach(z => {
+        const left = new THREE.Mesh(sideWindowGeometry, sideWindowMaterial);
+        left.position.set(-0.26, 0.45, z);
+        left.rotation.y = Math.PI / 2;
+        group.add(left);
+
+        const right = left.clone();
+        right.position.x = 0.26;
+        group.add(right);
+    });
+
+    const doorGeometry = new THREE.BoxGeometry(0.02, 0.24, 0.22);
+    const doorMaterial = new THREE.MeshLambertMaterial({ color: 0xE0E0E0 });
+
+    const leftDoor = new THREE.Mesh(doorGeometry, doorMaterial);
+    leftDoor.position.set(-0.30, 0.33, -0.05);
+    group.add(leftDoor);
+
+    const rightDoor = leftDoor.clone();
+    rightDoor.position.x = 0.30;
+    group.add(rightDoor);
+
+    const roofBoxGeometry = new THREE.BoxGeometry(0.20, 0.05, 0.25);
+    const roofBoxMaterial = new THREE.MeshLambertMaterial({ color: 0xDDDDDD });
+    const roofBox = new THREE.Mesh(roofBoxGeometry, roofBoxMaterial);
+    roofBox.position.set(0, 0.65, -0.10);
+    group.add(roofBox);
+
+    const pantographBaseGeometry = new THREE.BoxGeometry(0.12, 0.02, 0.16);
+    const pantographBaseMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+    const pantographBase = new THREE.Mesh(pantographBaseGeometry, pantographBaseMaterial);
+    pantographBase.position.set(0, 0.69, -0.10);
+    group.add(pantographBase);
+
+    const pantographArmGeometry = new THREE.BoxGeometry(0.02, 0.10, 0.02);
+    const pantographArmMaterial = new THREE.MeshLambertMaterial({ color: 0x777777 });
+    const arm1 = new THREE.Mesh(pantographArmGeometry, pantographArmMaterial);
+    arm1.position.set(-0.04, 0.74, -0.10);
+    arm1.rotation.z = Math.PI / 6;
+    group.add(arm1);
+
+    const arm2 = arm1.clone();
+    arm2.position.x = 0.04;
+    arm2.rotation.z = -Math.PI / 6;
+    group.add(arm2);
+
+    const pantographBarGeometry = new THREE.BoxGeometry(0.16, 0.02, 0.02);
+    const pantographBarMaterial = new THREE.MeshLambertMaterial({ color: 0x777777 });
+    const pantographBar = new THREE.Mesh(pantographBarGeometry, pantographBarMaterial);
+    pantographBar.position.set(0, 0.79, -0.10);
+    group.add(pantographBar);
+
+    const lightGeometry = new THREE.CylinderGeometry(0.035, 0.035, 0.03, 12);
+    const lightMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFCC });
+
+    const frontLightLeft = new THREE.Mesh(lightGeometry, lightMaterial);
+    frontLightLeft.position.set(-0.10, 0.34, 0.86);
+    frontLightLeft.rotation.x = Math.PI / 2;
+    group.add(frontLightLeft);
+
+    const frontLightRight = frontLightLeft.clone();
+    frontLightRight.position.x = 0.10;
+    group.add(frontLightRight);
+
+    const rearLightLeft = frontLightLeft.clone();
+    rearLightLeft.position.set(-0.10, 0.34, -0.86);
+    group.add(rearLightLeft);
+
+    const rearLightRight = frontLightRight.clone();
+    rearLightRight.position.z = -0.86;
+    group.add(rearLightRight);
+
+    const undercarriageGeometry = new THREE.BoxGeometry(0.50, 0.10, 0.85);
+    const undercarriageMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
+    const undercarriage = new THREE.Mesh(undercarriageGeometry, undercarriageMaterial);
+    undercarriage.position.y = 0.18;
+    group.add(undercarriage);
+
     addWheels(group);
 
     return group;
 }
+
 
 function createPassengerCar() {
     const group = new THREE.Group();
@@ -994,9 +1589,10 @@ function placeTrain(row, col) {
         engineType: selectedEngine,
         cars: [...selectedCars],
         mesh: trainMesh,
-        speed: 0.5, // cells per second
+        speed: 1.5, // cells per second
         progress: 0, // 0 to 1 within current cell
-        moving: false
+        moving: false,
+        stopped: false
     });
 
     playSound('place');
@@ -1035,6 +1631,11 @@ function stepTrains(delta) {
             return; // Train is stuck
         }
 
+        // Don't move if train has stopped at end of track
+        if (train.stopped) {
+            return;
+        }
+
         train.progress += train.speed * delta;
 
         if (train.progress >= 1.0) {
@@ -1056,15 +1657,18 @@ function moveTrainToNextCell(train) {
     const next = getNextState(train.row, train.col, train.enterDir, trackType);
 
     if (!next) {
-        // No valid next cell, stop
-        train.progress = 0;
+        // No valid next cell, stop the train
+        train.progress = 1.0; // Keep at end of current cell
+        train.stopped = true;
         return;
     }
 
     // Check if next cell has track
     const nextCell = grid[next.row][next.col];
     if (!nextCell || nextCell.kind !== 'track') {
-        train.progress = 0;
+        // Reached end of track, stop the train
+        train.progress = 1.0; // Keep at end of current cell
+        train.stopped = true;
         return;
     }
 
