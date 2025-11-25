@@ -28,11 +28,13 @@ let scene, camera, renderer, controls;
 let groundPlane, gridHelper;
 let grid = []; // grid[row][col] = { kind, trackType, mesh, ... }
 let trains = []; // { row, col, dir, enterDir, engineType, cars, mesh, speed, progress, moving, stopped }
-let selectedTool = 'straight'; // 'straight', 'curve', 'engine-steam', 'engine-diesel', 'delete'
+let selectedTool = 'straight'; // 'straight', 'curve', 'crossing', 'engine-steam', 'engine-diesel', 'delete'
 let isPlaying = false;
 let soundEnabled = true;
 let audioContext = null;
 let steamEngineSound = null;
+let dingSound = null;
+let crossings = []; // { row, col, mesh, arms: [arm1, arm2], active: bool, dingSound: Audio }
 
 // Raycaster for picking
 const raycaster = new THREE.Raycaster();
@@ -284,6 +286,8 @@ function handleTap() {
         if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE) {
             if (selectedTool === 'straight' || selectedTool === 'curve') {
                 placeTrackSmart(row, col, selectedTool);
+            } else if (selectedTool === 'crossing') {
+                placeCrossing(row, col);
             } else if (selectedTool === 'engine-steam' || selectedTool === 'engine-diesel') {
                 placeTrain(row, col, selectedTool);
             } else if (selectedTool === 'delete') {
@@ -302,6 +306,8 @@ function createTrackMesh(type) {
 
     if (type === 'straight-h' || type === 'straight-v') {
         createStraightTrack(group, type === 'straight-h');
+    } else if (type === 'crossing-h' || type === 'crossing-v') {
+        createLevelCrossing(group, type === 'crossing-h');
     } else if (type.startsWith('curve-')) {
         createCurvedTrack(group, type);
     } else if (type === 'tree') {
@@ -483,6 +489,547 @@ function createCurvedTrack(group, type) {
     const outerRailMesh = new THREE.Mesh(outerRailShape, railMaterial);
     outerRailMesh.castShadow = true;
     group.add(outerRailMesh);
+}
+
+function createLevelCrossing(group, horizontal) {
+    // Double length track
+    const trackLength = CELL_SIZE * 2 * 0.99;
+    const sleeperCount = 10;
+    const sleeperSpacing = trackLength / (sleeperCount - 1);
+    const sleeperWidth = 0.15;
+    const sleeperLength = SLEEPER_LENGTH;
+
+    // Sleepers
+    const sleeperGeometry = new THREE.BoxGeometry(
+        horizontal ? sleeperWidth : sleeperLength,
+        SLEEPER_HEIGHT,
+        horizontal ? sleeperLength : sleeperWidth
+    );
+    const sleeperMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+
+    for (let i = 0; i < sleeperCount; i++) {
+        const sleeper = new THREE.Mesh(sleeperGeometry, sleeperMaterial);
+        sleeper.castShadow = true;
+        sleeper.receiveShadow = true;
+
+        if (horizontal) {
+            sleeper.position.set(
+                -trackLength / 2 + i * sleeperSpacing,
+                SLEEPER_HEIGHT / 2,
+                0
+            );
+        } else {
+            sleeper.position.set(
+                0,
+                SLEEPER_HEIGHT / 2,
+                -trackLength / 2 + i * sleeperSpacing
+            );
+        }
+        group.add(sleeper);
+    }
+
+    // Rails
+    const railGeometry = new THREE.BoxGeometry(
+        horizontal ? trackLength : 0.1,
+        RAIL_HEIGHT,
+        horizontal ? 0.1 : trackLength
+    );
+    const railMaterial = new THREE.MeshStandardMaterial({
+        color: 0x888888,
+        metalness: 0.7,
+        roughness: 0.3
+    });
+
+    const rail1 = new THREE.Mesh(railGeometry, railMaterial);
+    const rail2 = new THREE.Mesh(railGeometry, railMaterial);
+
+    if (horizontal) {
+        rail1.position.set(0, SLEEPER_HEIGHT + RAIL_HEIGHT / 2, -TRACK_WIDTH / 2);
+        rail2.position.set(0, SLEEPER_HEIGHT + RAIL_HEIGHT / 2, TRACK_WIDTH / 2);
+    } else {
+        rail1.position.set(-TRACK_WIDTH / 2, SLEEPER_HEIGHT + RAIL_HEIGHT / 2, 0);
+        rail2.position.set(TRACK_WIDTH / 2, SLEEPER_HEIGHT + RAIL_HEIGHT / 2, 0);
+    }
+
+    rail1.castShadow = true;
+    rail2.castShadow = true;
+    group.add(rail1, rail2);
+
+    // ROAD CROSSING THE TRACKS
+    // Gray pavement with yellow warning stripes
+    const pavementMaterial = new THREE.MeshStandardMaterial({
+        color: 0x666666,
+        roughness: 0.9
+    });
+    const yellowStripeMaterial = new THREE.MeshStandardMaterial({
+        color: 0xFFD700,
+        roughness: 0.8
+    });
+    const blackStripeMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a,
+        roughness: 0.9
+    });
+
+    // Main road surface (perpendicular to tracks)
+    const roadWidth = 1.6;
+    const roadGeometry = new THREE.BoxGeometry(
+        horizontal ? trackLength : roadWidth,
+        0.03,
+        horizontal ? roadWidth : trackLength
+    );
+    const roadSurface = new THREE.Mesh(roadGeometry, pavementMaterial);
+    roadSurface.position.set(0, 0.02, 0);
+    roadSurface.receiveShadow = true;
+    group.add(roadSurface);
+
+    // Yellow and black diagonal warning stripes on the road
+    const stripeWidth = 0.15;
+    const stripeCount = 12;
+
+    for (let i = 0; i < stripeCount; i++) {
+        const isYellow = i % 2 === 0;
+        const stripeGeometry = new THREE.BoxGeometry(
+            horizontal ? stripeWidth : roadWidth * 0.9,
+            0.031,
+            horizontal ? roadWidth * 0.9 : stripeWidth
+        );
+        const stripe = new THREE.Mesh(stripeGeometry, isYellow ? yellowStripeMaterial : blackStripeMaterial);
+
+        if (horizontal) {
+            stripe.position.set(-trackLength / 2 + (i + 0.5) * (trackLength / stripeCount), 0.021, 0);
+        } else {
+            stripe.position.set(0, 0.021, -trackLength / 2 + (i + 0.5) * (trackLength / stripeCount));
+        }
+        group.add(stripe);
+    }
+
+    // CROSSING SIGNALS
+    const poleMaterial = new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        metalness: 0.5,
+        roughness: 0.6
+    });
+    const whiteMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.3
+    });
+    const blackMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a
+    });
+
+    const lights = [];
+
+    // Create signals on both sides
+    if (horizontal) {
+        // Left side signal (moved farther left, opposite to arm direction)
+        const poleLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8), poleMaterial);
+        poleLeft.position.set(-1.0, 0.6, -0.9);
+        poleLeft.castShadow = true;
+        group.add(poleLeft);
+
+        // Crossbuck sign (X shape)
+        const crossbuckLeft = new THREE.Group();
+        const signBoard1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.02), whiteMaterial);
+        signBoard1.rotation.z = Math.PI / 4;
+        const signBoard2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.02), whiteMaterial);
+        signBoard2.rotation.z = -Math.PI / 4;
+        const signBorder1 = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.10, 0.015), blackMaterial);
+        signBorder1.rotation.z = Math.PI / 4;
+        signBorder1.position.z = -0.01;
+        const signBorder2 = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.10, 0.015), blackMaterial);
+        signBorder2.rotation.z = -Math.PI / 4;
+        signBorder2.position.z = -0.01;
+        crossbuckLeft.add(signBorder1, signBorder2, signBoard1, signBoard2);
+        crossbuckLeft.position.set(-1.0, 0.9, -0.9);
+        group.add(crossbuckLeft);
+
+        // Flashing lights housing
+        const lightBoxLeft = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.08, 0.08, 0.25, 8),
+            blackMaterial
+        );
+        lightBoxLeft.position.set(-1.0, 1.15, -0.9);
+        group.add(lightBoxLeft);
+
+        // Red lights (will flash) - facing track side
+        const lightLeft1Front = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightLeft1Front.position.set(-1.0, 1.22, -0.82);
+        lightLeft1Front.rotation.y = Math.PI;
+        group.add(lightLeft1Front);
+        lights.push(lightLeft1Front);
+
+        const lightLeft2Front = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightLeft2Front.position.set(-1.0, 1.08, -0.82);
+        lightLeft2Front.rotation.y = Math.PI;
+        group.add(lightLeft2Front);
+        lights.push(lightLeft2Front);
+
+        // Red lights - facing road side (opposite direction)
+        const lightLeft1Back = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightLeft1Back.position.set(-1.0, 1.22, -0.98);
+        lightLeft1Back.rotation.y = 0;
+        group.add(lightLeft1Back);
+        lights.push(lightLeft1Back);
+
+        const lightLeft2Back = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightLeft2Back.position.set(-1.0, 1.08, -0.98);
+        lightLeft2Back.rotation.y = 0;
+        group.add(lightLeft2Back);
+        lights.push(lightLeft2Back);
+
+        // Right side signal (mirror, symmetric to left post)
+        const poleRight = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8), poleMaterial);
+        poleRight.position.set(1.0, 0.6, 0.9);
+        poleRight.castShadow = true;
+        group.add(poleRight);
+
+        const crossbuckRight = crossbuckLeft.clone();
+        crossbuckRight.position.set(1.0, 0.9, 0.9);
+        group.add(crossbuckRight);
+
+        const lightBoxRight = lightBoxLeft.clone();
+        lightBoxRight.position.set(1.0, 1.15, 0.9);
+        group.add(lightBoxRight);
+
+        // Right side lights - facing track side
+        const lightRight1Front = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightRight1Front.position.set(1.0, 1.22, 0.82);
+        lightRight1Front.rotation.y = 0;
+        group.add(lightRight1Front);
+        lights.push(lightRight1Front);
+
+        const lightRight2Front = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightRight2Front.position.set(1.0, 1.08, 0.82);
+        lightRight2Front.rotation.y = 0;
+        group.add(lightRight2Front);
+        lights.push(lightRight2Front);
+
+        // Right side lights - facing road side (opposite direction)
+        const lightRight1Back = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightRight1Back.position.set(1.0, 1.22, 0.98);
+        lightRight1Back.rotation.y = Math.PI;
+        group.add(lightRight1Back);
+        lights.push(lightRight1Back);
+
+        const lightRight2Back = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightRight2Back.position.set(1.0, 1.08, 0.98);
+        lightRight2Back.rotation.y = Math.PI;
+        group.add(lightRight2Back);
+        lights.push(lightRight2Back);
+    } else {
+        // Vertical orientation (top pole moved farther up, opposite to arm direction)
+        const poleTop = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8), poleMaterial);
+        poleTop.position.set(-0.9, 0.6, -1.2);
+        poleTop.castShadow = true;
+        group.add(poleTop);
+
+        const crossbuckTop = new THREE.Group();
+        const signBoard1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.02), whiteMaterial);
+        signBoard1.rotation.z = Math.PI / 4;
+        const signBoard2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.02), whiteMaterial);
+        signBoard2.rotation.z = -Math.PI / 4;
+        const signBorder1 = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.10, 0.015), blackMaterial);
+        signBorder1.rotation.z = Math.PI / 4;
+        signBorder1.position.z = -0.01;
+        const signBorder2 = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.10, 0.015), blackMaterial);
+        signBorder2.rotation.z = -Math.PI / 4;
+        signBorder2.position.z = -0.01;
+        crossbuckTop.add(signBorder1, signBorder2, signBoard1, signBoard2);
+        crossbuckTop.position.set(-0.9, 0.9, -1.2);
+        group.add(crossbuckTop);
+
+        const lightBoxTop = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.08, 0.08, 0.25, 8),
+            blackMaterial
+        );
+        lightBoxTop.position.set(-0.9, 1.15, -1.2);
+        group.add(lightBoxTop);
+
+        // Top pole lights - facing track side
+        const lightTop1Front = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightTop1Front.position.set(-0.82, 1.22, -1.2);
+        lightTop1Front.rotation.y = Math.PI / 2;
+        group.add(lightTop1Front);
+        lights.push(lightTop1Front);
+
+        const lightTop2Front = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightTop2Front.position.set(-0.82, 1.08, -1.2);
+        lightTop2Front.rotation.y = Math.PI / 2;
+        group.add(lightTop2Front);
+        lights.push(lightTop2Front);
+
+        // Top pole lights - facing road side (opposite direction)
+        const lightTop1Back = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightTop1Back.position.set(-0.98, 1.22, -1.2);
+        lightTop1Back.rotation.y = -Math.PI / 2;
+        group.add(lightTop1Back);
+        lights.push(lightTop1Back);
+
+        const lightTop2Back = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightTop2Back.position.set(-0.98, 1.08, -1.2);
+        lightTop2Back.rotation.y = -Math.PI / 2;
+        group.add(lightTop2Back);
+        lights.push(lightTop2Back);
+
+        const poleBottom = poleTop.clone();
+        poleBottom.position.set(0.9, 0.6, -1.2);
+        group.add(poleBottom);
+
+        const crossbuckBottom = crossbuckTop.clone();
+        crossbuckBottom.position.set(0.9, 0.9, -1.2);
+        group.add(crossbuckBottom);
+
+        const lightBoxBottom = lightBoxTop.clone();
+        lightBoxBottom.position.set(0.9, 1.15, -1.2);
+        group.add(lightBoxBottom);
+
+        // Bottom pole lights - facing track side
+        const lightBottom1Front = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightBottom1Front.position.set(0.82, 1.22, -1.2);
+        lightBottom1Front.rotation.y = -Math.PI / 2;
+        group.add(lightBottom1Front);
+        lights.push(lightBottom1Front);
+
+        const lightBottom2Front = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightBottom2Front.position.set(0.82, 1.08, -1.2);
+        lightBottom2Front.rotation.y = -Math.PI / 2;
+        group.add(lightBottom2Front);
+        lights.push(lightBottom2Front);
+
+        // Bottom pole lights - facing road side (opposite direction)
+        const lightBottom1Back = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightBottom1Back.position.set(0.98, 1.22, -1.2);
+        lightBottom1Back.rotation.y = Math.PI / 2;
+        group.add(lightBottom1Back);
+        lights.push(lightBottom1Back);
+
+        const lightBottom2Back = new THREE.Mesh(
+            new THREE.CircleGeometry(0.05, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 0
+            })
+        );
+        lightBottom2Back.position.set(0.98, 1.08, -1.2);
+        lightBottom2Back.rotation.y = Math.PI / 2;
+        group.add(lightBottom2Back);
+        lights.push(lightBottom2Back);
+    }
+
+    // BARRIER ARMS that block the road
+    const barrierArmMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.3
+    });
+    const barrierRedStripeMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff0000,
+        roughness: 0.3
+    });
+
+    const arms = [];
+
+    if (horizontal) {
+        // Left side arm
+        const armLeftGroup = new THREE.Group();
+        const armLeftBar = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.08), barrierArmMaterial);
+        armLeftBar.position.set(0.6, 0, 0);
+
+        // Red stripes
+        for (let i = 0; i < 4; i++) {
+            const stripe = new THREE.Mesh(
+                new THREE.BoxGeometry(0.15, 0.061, 0.081),
+                barrierRedStripeMaterial
+            );
+            stripe.position.set(0.2 + i * 0.28, 0, 0);
+            armLeftGroup.add(stripe);
+        }
+
+        armLeftGroup.add(armLeftBar);
+        armLeftGroup.position.set(-1.0, 0.7, -0.9);
+        armLeftGroup.rotation.z = Math.PI / 2; // Start in up position (vertical)
+        armLeftGroup.userData.upRotation = Math.PI / 2; // Up position (vertical)
+        armLeftGroup.userData.horizontalRotation = 0; // Horizontal pointing right (train present)
+        group.add(armLeftGroup);
+        arms.push(armLeftGroup);
+
+        // Right side arm
+        const armRightGroup = new THREE.Group();
+        const armRightBar = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.08), barrierArmMaterial);
+        armRightBar.position.set(0.6, 0, 0);
+
+        for (let i = 0; i < 4; i++) {
+            const stripe = new THREE.Mesh(
+                new THREE.BoxGeometry(0.15, 0.061, 0.081),
+                barrierRedStripeMaterial
+            );
+            stripe.position.set(0.2 + i * 0.28, 0, 0);
+            armRightGroup.add(stripe);
+        }
+
+        armRightGroup.add(armRightBar);
+        armRightGroup.position.set(1.0, 0.7, 0.9);
+        armRightGroup.rotation.z = Math.PI / 2; // Start in up position (vertical)
+        armRightGroup.userData.upRotation = Math.PI / 2; // Up position (vertical)
+        armRightGroup.userData.horizontalRotation = Math.PI; // Horizontal pointing left (train present, opposite direction)
+        group.add(armRightGroup);
+        arms.push(armRightGroup);
+    } else {
+        // Top side arm
+        const armTopGroup = new THREE.Group();
+        const armTopBar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 1.2), barrierArmMaterial);
+        armTopBar.position.set(0, 0, 0.6);
+
+        for (let i = 0; i < 4; i++) {
+            const stripe = new THREE.Mesh(
+                new THREE.BoxGeometry(0.081, 0.061, 0.15),
+                barrierRedStripeMaterial
+            );
+            stripe.position.set(0, 0, 0.2 + i * 0.28);
+            armTopGroup.add(stripe);
+        }
+
+        armTopGroup.add(armTopBar);
+        armTopGroup.position.set(-0.9, 0.7, -1.2);
+        armTopGroup.rotation.z = Math.PI / 2; // Start in up position (vertical)
+        armTopGroup.userData.upRotation = Math.PI / 2; // Up position (vertical)
+        armTopGroup.userData.horizontalRotation = 0; // Horizontal pointing down (train present)
+        group.add(armTopGroup);
+        arms.push(armTopGroup);
+
+        // Bottom side arm
+        const armBottomGroup = new THREE.Group();
+        const armBottomBar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 1.2), barrierArmMaterial);
+        armBottomBar.position.set(0, 0, 0.6);
+
+        for (let i = 0; i < 4; i++) {
+            const stripe = new THREE.Mesh(
+                new THREE.BoxGeometry(0.081, 0.061, 0.15),
+                barrierRedStripeMaterial
+            );
+            stripe.position.set(0, 0, 0.2 + i * 0.28);
+            armBottomGroup.add(stripe);
+        }
+
+        armBottomGroup.add(armBottomBar);
+        armBottomGroup.position.set(0.9, 0.7, -1.2);
+        armBottomGroup.rotation.z = Math.PI / 2; // Start in up position (vertical)
+        armBottomGroup.userData.upRotation = Math.PI / 2; // Up position (vertical)
+        armBottomGroup.userData.horizontalRotation = Math.PI; // Horizontal pointing up (train present, opposite direction)
+        group.add(armBottomGroup);
+        arms.push(armBottomGroup);
+    }
+
+    // Store lights and arms for animation
+    group.userData.lights = lights;
+    group.userData.arms = arms;
+    group.userData.horizontal = horizontal;
+    group.userData.lightState = 0; // For alternating flash
 }
 
 function createTree(group) {
@@ -1248,26 +1795,181 @@ function deleteTrack(row, col) {
 
     // Only delete if there's a track
     if (cell && cell.kind === 'track') {
-        // Remove the mesh from scene
-        if (cell.mesh) {
-            scene.remove(cell.mesh);
-        }
+        // Check if this is a crossing
+        if (cell.trackType && cell.trackType.startsWith('crossing-')) {
+            const crossingMesh = cell.mesh;
+            const isHorizontal = cell.trackType === 'crossing-h';
 
-        // Reset the cell
-        grid[row][col] = { kind: null };
+            // Get the starting cell of the crossing
+            const startRow = cell.crossingRow !== undefined ? cell.crossingRow : row;
+            const startCol = cell.crossingCol !== undefined ? cell.crossingCol : col;
 
-        // Remove any trains at this location
-        trains = trains.filter(train => {
-            if (train.row === row && train.col === col) {
-                scene.remove(train.mesh);
-                return false;
+            // Find and remove from crossings array
+            const crossingIndex = crossings.findIndex(c =>
+                c.row === startRow && c.col === startCol && c.mesh === crossingMesh
+            );
+            if (crossingIndex !== -1) {
+                const crossing = crossings[crossingIndex];
+                // Stop any playing sound
+                if (crossing.dingSound && !crossing.dingSound.paused) {
+                    crossing.dingSound.pause();
+                }
+                crossings.splice(crossingIndex, 1);
             }
-            return true;
-        });
+
+            // Remove mesh from scene
+            scene.remove(crossingMesh);
+
+            // Clear both cells of the crossing
+            grid[startRow][startCol] = { kind: null };
+            const endRow = isHorizontal ? startRow : startRow + 1;
+            const endCol = isHorizontal ? startCol + 1 : startCol;
+            if (endRow < GRID_SIZE && endCol < GRID_SIZE) {
+                grid[endRow][endCol] = { kind: null };
+            }
+
+            // Remove any trains at either location
+            trains = trains.filter(train => {
+                if ((train.row === startRow && train.col === startCol) ||
+                    (train.row === endRow && train.col === endCol)) {
+                    scene.remove(train.mesh);
+                    return false;
+                }
+                return true;
+            });
+        } else {
+            // Regular track
+            if (cell.mesh) {
+                scene.remove(cell.mesh);
+            }
+            grid[row][col] = { kind: null };
+
+            // Remove any trains at this location
+            trains = trains.filter(train => {
+                if (train.row === row && train.col === col) {
+                    scene.remove(train.mesh);
+                    return false;
+                }
+                return true;
+            });
+        }
 
         playSound('place');
         updateSteamEngineSound();
     }
+}
+
+function getTrackAt(row, col) {
+    if (row < 0 || row >= GRID_SIZE || col < 0 || col >= GRID_SIZE) {
+        return null;
+    }
+    const cell = grid[row][col];
+    if (cell && cell.kind === 'track') {
+        return cell;
+    }
+    return null;
+}
+
+function placeCrossing(row, col) {
+    // Determine orientation based on neighbors
+    const north = getTrackAt(row - 1, col);
+    const south = getTrackAt(row + 1, col);
+    const east = getTrackAt(row, col + 1);
+    const west = getTrackAt(row, col - 1);
+
+    const hasVertical = (north && north.trackType && north.trackType.includes('-v')) ||
+        (south && south.trackType && south.trackType.includes('-v'));
+    const hasHorizontal = (east && east.trackType && east.trackType.includes('-h')) ||
+        (west && west.trackType && west.trackType.includes('-h'));
+
+    let horizontal = !hasVertical; // Default to horizontal unless vertical tracks detected
+    if (hasHorizontal && !hasVertical) horizontal = true;
+
+    const trackType = horizontal ? 'crossing-h' : 'crossing-v';
+
+    // Check if there's space for 2-cell crossing
+    const nextRow = horizontal ? row : row + 1;
+    const nextCol = horizontal ? col + 1 : col;
+
+    if (nextRow >= GRID_SIZE || nextCol >= GRID_SIZE) {
+        console.log('Not enough space for crossing');
+        return;
+    }
+
+    // Check if second cell already has a crossing
+    const nextCell = grid[nextRow][nextCol];
+    if (nextCell && nextCell.trackType && nextCell.trackType.startsWith('crossing-')) {
+        console.log('Cannot place crossing here - already occupied by another crossing');
+        return;
+    }
+
+    // Remove existing tracks in both cells (but be careful with crossings)
+    const currentCell = grid[row][col];
+    if (currentCell && currentCell.mesh) {
+        // If current cell is part of a crossing, delete the whole crossing first
+        if (currentCell.trackType && currentCell.trackType.startsWith('crossing-')) {
+            deleteTrack(row, col);
+        } else {
+            scene.remove(currentCell.mesh);
+        }
+    }
+
+    if (nextCell && nextCell.mesh) {
+        // If next cell is part of a crossing, delete it
+        if (nextCell.trackType && nextCell.trackType.startsWith('crossing-')) {
+            deleteTrack(nextRow, nextCol);
+        } else {
+            scene.remove(nextCell.mesh);
+        }
+    }
+
+    // Create crossing
+    const crossingMesh = createTrackMesh(trackType);
+
+    // Position at the center of the two cells
+    const centerX = (col + nextCol) * CELL_SIZE / 2 + CELL_SIZE / 2;
+    const centerZ = (row + nextRow) * CELL_SIZE / 2 + CELL_SIZE / 2;
+
+    crossingMesh.position.set(centerX, 0, centerZ);
+    scene.add(crossingMesh);
+
+    // Mark both cells as having this crossing
+    grid[row][col] = {
+        kind: 'track',
+        trackType: trackType,
+        mesh: crossingMesh,
+        isCrossingStart: true,
+        crossingRow: row,
+        crossingCol: col
+    };
+    grid[nextRow][nextCol] = {
+        kind: 'track',
+        trackType: trackType,
+        mesh: crossingMesh,
+        isCrossingEnd: true,
+        crossingRow: row,
+        crossingCol: col
+    };
+
+    // Create dedicated ding sound for this crossing
+    const crossingDingSound = new Audio('./sounds/dingding.mp3');
+    crossingDingSound.volume = 0.7;
+    crossingDingSound.loop = true;
+    crossingDingSound.load();
+
+    // Add to crossings array for animation
+    crossings.push({
+        row: row,
+        col: col,
+        mesh: crossingMesh,
+        active: false,
+        dingSound: crossingDingSound,
+        horizontal: horizontal,
+        lightTimer: 0,
+        deactivateTimer: 0
+    });
+
+    playSound('place');
 }
 
 function placeTrain(row, col, engineType) {
@@ -1293,7 +1995,7 @@ function placeTrain(row, col, engineType) {
     // Determine initial direction based on track type
     let initialDir = DIR.RIGHT;
     let initialEnterDir = DIR.RIGHT; // Same as travel direction
-    if (cell.trackType === 'straight-v') {
+    if (cell.trackType === 'straight-v' || cell.trackType === 'crossing-v') {
         initialDir = DIR.DOWN;
         initialEnterDir = DIR.DOWN;
     } else if (cell.trackType.startsWith('curve-')) {
@@ -1315,13 +2017,13 @@ function placeTrain(row, col, engineType) {
     let startX = cellCenterX;
     let startZ = cellCenterZ;
 
-    if (cell.trackType === 'straight-h') {
+    if (cell.trackType === 'straight-h' || cell.trackType === 'crossing-h') {
         if (initialEnterDir === DIR.RIGHT) {
             startX = cellCenterX - CELL_SIZE / 2; // Left edge
         } else if (initialEnterDir === DIR.LEFT) {
             startX = cellCenterX + CELL_SIZE / 2; // Right edge
         }
-    } else if (cell.trackType === 'straight-v') {
+    } else if (cell.trackType === 'straight-v' || cell.trackType === 'crossing-v') {
         if (initialEnterDir === DIR.DOWN) {
             startZ = cellCenterZ - CELL_SIZE / 2; // Top edge
         } else if (initialEnterDir === DIR.UP) {
@@ -1527,7 +2229,7 @@ function getNextState(row, col, enterDir, trackType) {
     let nextRow = row;
     let nextCol = col;
 
-    if (trackType === 'straight-h') {
+    if (trackType === 'straight-h' || trackType === 'crossing-h') {
         if (enterDir === DIR.RIGHT) {
             exitDir = DIR.RIGHT;
             nextCol = col + 1;
@@ -1535,7 +2237,7 @@ function getNextState(row, col, enterDir, trackType) {
             exitDir = DIR.LEFT;
             nextCol = col - 1;
         }
-    } else if (trackType === 'straight-v') {
+    } else if (trackType === 'straight-v' || trackType === 'crossing-v') {
         if (enterDir === DIR.DOWN) {
             exitDir = DIR.DOWN;
             nextRow = row + 1;
@@ -1612,14 +2314,14 @@ function updateTrainPosition(train) {
     let z = cellCenterZ;
     let rotation = train.mesh.rotation.y;
 
-    if (trackType === 'straight-h') {
+    if (trackType === 'straight-h' || trackType === 'crossing-h') {
         if (train.enterDir === DIR.LEFT) {
             x = cellCenterX + CELL_SIZE / 2 - train.progress * CELL_SIZE;
         } else if (train.enterDir === DIR.RIGHT) {
             x = cellCenterX - CELL_SIZE / 2 + train.progress * CELL_SIZE;
         }
         rotation = getRotationForDirection(train.enterDir);
-    } else if (trackType === 'straight-v') {
+    } else if (trackType === 'straight-v' || trackType === 'crossing-v') {
         if (train.enterDir === DIR.UP) {
             z = cellCenterZ + CELL_SIZE / 2 - train.progress * CELL_SIZE;
         } else if (train.enterDir === DIR.DOWN) {
@@ -1724,6 +2426,14 @@ function initAudio() {
     steamEngineSound = new Audio('./sounds/steamengine.mp3');
     steamEngineSound.loop = true;
     steamEngineSound.volume = 0.5;
+
+    // Load crossing ding sound
+    dingSound = new Audio('./sounds/dingding.mp3');
+    dingSound.volume = 0.7;
+    dingSound.load(); // Preload the audio
+    dingSound.addEventListener('error', (e) => {
+        console.error('Failed to load dingding.mp3:', e);
+    });
 }
 
 function playSound(type) {
@@ -1774,6 +2484,139 @@ function updateSteamEngineSound() {
 }
 
 // ============================================================================
+// CROSSING ANIMATION
+// ============================================================================
+
+function updateCrossings(delta) {
+    if (!isPlaying) return;
+
+    crossings.forEach(crossing => {
+        // Check if any train is ON this crossing
+        let trainOnCrossing = false;
+
+        // Crossing occupies 2 cells
+        const crossingRow1 = crossing.row;
+        const crossingCol1 = crossing.col;
+        const crossingRow2 = crossing.horizontal ? crossingRow1 : crossingRow1 + 1;
+        const crossingCol2 = crossing.horizontal ? crossingCol1 + 1 : crossingCol1;
+
+        trains.forEach(train => {
+            // Check if train is on either of the crossing's two cells
+            if (!train.stopped) {
+                if ((train.row === crossingRow1 && train.col === crossingCol1) ||
+                    (train.row === crossingRow2 && train.col === crossingCol2)) {
+                    trainOnCrossing = true;
+                }
+            }
+        });
+
+        // Activate crossing when train is on it
+        if (trainOnCrossing) {
+            if (!crossing.active) {
+                activateCrossing(crossing);
+            }
+            crossing.deactivateTimer = 0; // Reset timer while train is present
+        } else if (crossing.active) {
+            // Start deactivation timer when train leaves
+            if (!crossing.deactivateTimer) crossing.deactivateTimer = 0;
+            crossing.deactivateTimer += delta;
+
+            // Wait 1 second after train leaves before turning off
+            if (crossing.deactivateTimer >= 1.0) {
+                deactivateCrossing(crossing);
+                crossing.deactivateTimer = 0;
+            }
+        }
+
+        // Animate flashing lights
+        if (crossing.active && crossing.mesh.userData.lights) {
+            // Update light state timer
+            if (!crossing.lightTimer) crossing.lightTimer = 0;
+            crossing.lightTimer += delta;
+
+            // Flash lights alternately every 0.5 seconds
+            if (crossing.lightTimer >= 0.5) {
+                crossing.lightTimer = 0;
+                crossing.mesh.userData.lightState = 1 - crossing.mesh.userData.lightState;
+
+                // Alternate between top and bottom lights
+                crossing.mesh.userData.lights.forEach((light, index) => {
+                    if (index % 2 === crossing.mesh.userData.lightState) {
+                        light.material.emissiveIntensity = 1.0;
+                    } else {
+                        light.material.emissiveIntensity = 0.1;
+                    }
+                });
+            }
+        } else if (!crossing.active && crossing.mesh.userData.lights) {
+            // Turn off all lights
+            crossing.mesh.userData.lights.forEach(light => {
+                light.material.emissiveIntensity = 0;
+            });
+            crossing.lightTimer = 0;
+        }
+
+        // Animate barrier arms
+        if (crossing.mesh.userData.arms) {
+            const rotationSpeed = 1.5; // radians per second
+
+            crossing.mesh.userData.arms.forEach(arm => {
+                // When train present (active): arms go horizontal (facing opposite directions)
+                // When no train: arms point up (vertical)
+                const targetRotation = crossing.active ? arm.userData.horizontalRotation : arm.userData.upRotation;
+                const currentRotation = arm.rotation.z;
+
+                // Determine direction based on which target we're moving toward
+                if (Math.abs(targetRotation - currentRotation) > 0.01) {
+                    if (currentRotation < targetRotation) {
+                        // Rotate positive
+                        arm.rotation.z = Math.min(currentRotation + rotationSpeed * delta, targetRotation);
+                    } else {
+                        // Rotate negative
+                        arm.rotation.z = Math.max(currentRotation - rotationSpeed * delta, targetRotation);
+                    }
+                }
+            });
+        }
+    });
+}
+
+function activateCrossing(crossing) {
+    crossing.active = true;
+
+    // Start ding sound (loop it)
+    if (soundEnabled && crossing.dingSound) {
+        crossing.dingSound.currentTime = 0;
+        crossing.dingSound.play().catch(err => console.error('Failed to start crossing ding sound:', err));
+    }
+}
+
+function deactivateCrossing(crossing) {
+    crossing.active = false;
+
+    // Stop ding sound
+    if (crossing.dingSound && !crossing.dingSound.paused) {
+        crossing.dingSound.pause();
+        crossing.dingSound.currentTime = 0;
+    }
+}
+
+function playDingSound() {
+    if (!soundEnabled || !dingSound) {
+        console.log('Cannot play ding sound - soundEnabled:', soundEnabled, 'dingSound:', dingSound);
+        return;
+    }
+
+    // Reset to beginning and play
+    try {
+        dingSound.currentTime = 0;
+        dingSound.play().catch(err => console.error('Ding sound play failed:', err));
+    } catch (err) {
+        console.error('Error playing ding sound:', err);
+    }
+}
+
+// ============================================================================
 // ANIMATION LOOP
 // ============================================================================
 
@@ -1787,6 +2630,7 @@ function animate(time = 0) {
 
     controls.update();
     stepTrains(delta);
+    updateCrossings(delta);
     renderer.render(scene, camera);
 }
 

@@ -24,7 +24,7 @@ body {
     height: 70px;
     background: rgba(255, 255, 255, 0.95);
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     padding: 10px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
@@ -68,6 +68,12 @@ body {
     box-shadow: 0 4px 0 #999;
     position: relative;
     top: 0;
+}
+
+#sound-btn {
+    position: absolute;
+    right: 10px;
+    top: 10px;
 }
 
 .btn:active {
@@ -174,6 +180,11 @@ body {
         font-size: 18px;
     }
     
+    #sound-btn {
+        right: 8px;
+        top: 8px;
+    }
+    
     .btn-play {
         min-width: 60px;
         height: 60px;
@@ -217,6 +228,11 @@ body {
         min-width: 60px;
         height: 36px;
         font-size: 16px;
+    }
+    
+    #sound-btn {
+        right: 10px;
+        top: 7px;
     }
     
     .btn-play {
