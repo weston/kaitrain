@@ -1060,46 +1060,50 @@ function getNextState(row, col, enterDir, trackType) {
             nextRow = row - 1;
         }
     } else if (trackType === 'curve-tl') {
-        // DOWN (from top) -> LEFT (to left)
+        // Connects TOP edge to LEFT edge
+        // DOWN (entering from top) -> LEFT (exit to left)
         if (enterDir === DIR.DOWN) {
             exitDir = DIR.LEFT;
             nextCol = col - 1;
         }
-        // LEFT (from left) -> UP (to top)
-        else if (enterDir === DIR.LEFT) {
+        // RIGHT (entering from left) -> UP (exit to top)
+        else if (enterDir === DIR.RIGHT) {
             exitDir = DIR.UP;
             nextRow = row - 1;
         }
     } else if (trackType === 'curve-tr') {
-        // DOWN (from top) -> RIGHT (to right)
+        // Connects TOP edge to RIGHT edge
+        // DOWN (entering from top) -> RIGHT (exit to right)
         if (enterDir === DIR.DOWN) {
             exitDir = DIR.RIGHT;
             nextCol = col + 1;
         }
-        // RIGHT (from right) -> UP (to top)
-        else if (enterDir === DIR.RIGHT) {
+        // LEFT (entering from right) -> UP (exit to top)
+        else if (enterDir === DIR.LEFT) {
             exitDir = DIR.UP;
             nextRow = row - 1;
         }
     } else if (trackType === 'curve-bl') {
-        // UP (from bottom) -> LEFT (to left)
+        // Connects BOTTOM edge to LEFT edge
+        // UP (entering from bottom) -> LEFT (exit to left)
         if (enterDir === DIR.UP) {
             exitDir = DIR.LEFT;
             nextCol = col - 1;
         }
-        // LEFT (from left) -> DOWN (to bottom)
-        else if (enterDir === DIR.LEFT) {
+        // RIGHT (entering from left) -> DOWN (exit to bottom)
+        else if (enterDir === DIR.RIGHT) {
             exitDir = DIR.DOWN;
             nextRow = row + 1;
         }
     } else if (trackType === 'curve-br') {
-        // UP (from bottom) -> RIGHT (to right)
+        // Connects BOTTOM edge to RIGHT edge
+        // UP (entering from bottom) -> RIGHT (exit to right)
         if (enterDir === DIR.UP) {
             exitDir = DIR.RIGHT;
             nextCol = col + 1;
         }
-        // RIGHT (from right) -> DOWN (to bottom)
-        else if (enterDir === DIR.RIGHT) {
+        // LEFT (entering from right) -> DOWN (exit to bottom)
+        else if (enterDir === DIR.LEFT) {
             exitDir = DIR.DOWN;
             nextRow = row + 1;
         }
@@ -1150,7 +1154,7 @@ function updateTrainPosition(train) {
                 // Travel TOP -> LEFT: angle 0 to PI/2
                 startAngle = 0;
                 endAngle = Math.PI / 2;
-            } else if (train.enterDir === DIR.LEFT) {
+            } else if (train.enterDir === DIR.RIGHT) {
                 // Travel LEFT -> TOP: angle PI/2 to 0 (reverse)
                 startAngle = Math.PI / 2;
                 endAngle = 0;
@@ -1163,7 +1167,7 @@ function updateTrainPosition(train) {
                 // Travel TOP -> RIGHT: angle PI to PI/2 (reverse)
                 startAngle = Math.PI;
                 endAngle = Math.PI / 2;
-            } else if (train.enterDir === DIR.RIGHT) {
+            } else if (train.enterDir === DIR.LEFT) {
                 // Travel RIGHT -> TOP: angle PI/2 to PI
                 startAngle = Math.PI / 2;
                 endAngle = Math.PI;
@@ -1176,7 +1180,7 @@ function updateTrainPosition(train) {
                 // Travel BOTTOM -> LEFT: angle 0 to -PI/2 (reverse)
                 startAngle = 0;
                 endAngle = -Math.PI / 2;
-            } else if (train.enterDir === DIR.LEFT) {
+            } else if (train.enterDir === DIR.RIGHT) {
                 // Travel LEFT -> BOTTOM: angle -PI/2 to 0
                 startAngle = -Math.PI / 2;
                 endAngle = 0;
@@ -1189,7 +1193,7 @@ function updateTrainPosition(train) {
                 // Travel BOTTOM -> RIGHT: angle PI to 3*PI/2
                 startAngle = Math.PI;
                 endAngle = Math.PI * 1.5;
-            } else if (train.enterDir === DIR.RIGHT) {
+            } else if (train.enterDir === DIR.LEFT) {
                 // Travel RIGHT -> BOTTOM: angle 3*PI/2 to PI (reverse)
                 startAngle = Math.PI * 1.5;
                 endAngle = Math.PI;
