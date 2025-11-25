@@ -285,7 +285,37 @@ function onPointerUp(event) {
 
 function handleTap() {
     raycaster.setFromCamera(pointer, camera);
-    const intersects = raycaster.intersectObject(groundPlane);
+
+    // In delete mode, also check for intersections with track meshes
+    let intersects;
+    if (mode === 'track' && deleteMode) {
+        // Collect all track meshes
+        const trackMeshes = [];
+        for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+                if (grid[r][c].mesh) {
+                    trackMeshes.push(grid[r][c].mesh);
+                }
+            }
+        }
+        // Check intersections with tracks first
+        intersects = raycaster.intersectObjects(trackMeshes, true);
+
+        // If we hit a track, find which cell it belongs to
+        if (intersects.length > 0) {
+            const point = intersects[0].point;
+            const col = Math.floor(point.x / CELL_SIZE);
+            const row = Math.floor(point.z / CELL_SIZE);
+
+            if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE) {
+                deleteTrack(row, col);
+            }
+            return;
+        }
+    }
+
+    // Otherwise, use ground plane intersection
+    intersects = raycaster.intersectObject(groundPlane);
 
     if (intersects.length > 0) {
         const point = intersects[0].point;
@@ -294,7 +324,11 @@ function handleTap() {
 
         if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE) {
             if (mode === 'track') {
-                placeTrackSmart(row, col, selectedType);
+                if (deleteMode) {
+                    deleteTrack(row, col);
+                } else {
+                    placeTrackSmart(row, col, selectedType);
+                }
             } else if (mode === 'train') {
                 if (selectedEngine) {
                     placeTrain(row, col);
