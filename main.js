@@ -2810,7 +2810,7 @@ function initAudio() {
 
     // Load crossing ding sound
     dingSound = new Audio('./sounds/dingding.mp3');
-    dingSound.volume = 0.7;
+    dingSound.volume = 1;
     dingSound.load(); // Preload the audio
     dingSound.addEventListener('error', (e) => {
         console.error('Failed to load dingding.mp3.mov:', e);
