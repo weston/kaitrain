@@ -27,7 +27,7 @@ const DIR = {
 let scene, camera, renderer, controls;
 let groundPlane, gridHelper;
 let grid = []; // grid[row][col] = { kind, trackType, mesh, ... }
-let trains = []; // { row, col, dir, enterDir, engineType, cars, mesh, speed, progress, moving, stopped }
+let trains = []; // { segments: [{ type, mesh, row, col, dir, enterDir, progress }], speed, moving, stopped }
 let selectedTool = 'straight'; // 'straight', 'curve', 'crossing', 'engine-steam', 'engine-diesel', 'delete'
 let isPlaying = false;
 let soundEnabled = true;
@@ -35,6 +35,9 @@ let audioContext = null;
 let steamEngineSound = null;
 let dingSound = null;
 let crossings = []; // { row, col, mesh, arms: [arm1, arm2], active: bool, dingSound: Audio }
+
+const SEGMENT_SPACING = 0.9; // Distance between segments
+const ENGINE_TO_CAR_SPACING = 1.05; // Extra space between engine and first car
 
 // Raycaster for picking
 const raycaster = new THREE.Raycaster();
@@ -227,24 +230,32 @@ function handleTap() {
 
     // In delete mode, check for trains first
     if (selectedTool === 'delete') {
-        // Check for train hits
-        const trainMeshes = trains.map(t => t.mesh);
+        // Check for train hits (check all segment meshes)
+        const trainMeshes = [];
+        trains.forEach(t => {
+            t.segments.forEach(seg => trainMeshes.push(seg.mesh));
+        });
         const trainIntersects = raycaster.intersectObjects(trainMeshes, true);
 
         if (trainIntersects.length > 0) {
             // Find which train was clicked
             const clickedMesh = trainIntersects[0].object;
-            let clickedTrainMesh = clickedMesh;
+            let clickedSegmentMesh = clickedMesh;
 
-            // Traverse up to find the train group
-            while (clickedTrainMesh.parent && !trains.some(t => t.mesh === clickedTrainMesh)) {
-                clickedTrainMesh = clickedTrainMesh.parent;
+            // Traverse up to find the segment mesh
+            while (clickedSegmentMesh.parent && !trains.some(t =>
+                t.segments.some(seg => seg.mesh === clickedSegmentMesh)
+            )) {
+                clickedSegmentMesh = clickedSegmentMesh.parent;
             }
 
             // Delete the train
-            const trainIndex = trains.findIndex(t => t.mesh === clickedTrainMesh);
+            const trainIndex = trains.findIndex(t =>
+                t.segments.some(seg => seg.mesh === clickedSegmentMesh)
+            );
             if (trainIndex !== -1) {
-                scene.remove(trains[trainIndex].mesh);
+                // Remove all segment meshes
+                trains[trainIndex].segments.forEach(seg => scene.remove(seg.mesh));
                 trains.splice(trainIndex, 1);
                 playSound('place');
                 updateSteamEngineSound();
@@ -272,6 +283,38 @@ function handleTap() {
                 deleteTrack(row, col);
             }
             return;
+        }
+    }
+
+    // In car-passenger or car-caboose mode, check for trains to attach car to
+    if (selectedTool === 'car-passenger' || selectedTool === 'car-caboose') {
+        // Check for train hits (check all segment meshes)
+        const trainMeshes = [];
+        trains.forEach(t => {
+            t.segments.forEach(seg => trainMeshes.push(seg.mesh));
+        });
+        const trainIntersects = raycaster.intersectObjects(trainMeshes, true);
+
+        if (trainIntersects.length > 0) {
+            // Find which train was clicked
+            const clickedMesh = trainIntersects[0].object;
+            let clickedSegmentMesh = clickedMesh;
+
+            // Traverse up to find the segment mesh
+            while (clickedSegmentMesh.parent && !trains.some(t =>
+                t.segments.some(seg => seg.mesh === clickedSegmentMesh)
+            )) {
+                clickedSegmentMesh = clickedSegmentMesh.parent;
+            }
+
+            // Add car to the train
+            const trainIndex = trains.findIndex(t =>
+                t.segments.some(seg => seg.mesh === clickedSegmentMesh)
+            );
+            if (trainIndex !== -1) {
+                addCarToTrain(trains[trainIndex], selectedTool); // Use selectedTool to get the car type
+                return;
+            }
         }
     }
 
@@ -1108,41 +1151,34 @@ function createSmokeParticles() {
     return smokeSystem;
 }
 
-function createTrainMesh(engineType, cars = []) {
-    const trainGroup = new THREE.Group();
-
-    // Create engine
+function createEngineMesh(engineType) {
+    // Create engine mesh (no longer a group with cars)
     let engineMesh;
     if (engineType === 'engine-steam') {
         engineMesh = createSteamEngine();
         // Add smoke particle system
         const smokeSystem = createSmokeParticles();
         smokeSystem.position.set(0, 0.91, 0.42); // Position at the top of smokestack
-        trainGroup.add(smokeSystem);
-        trainGroup.userData.smokeSystem = smokeSystem;
+        engineMesh.add(smokeSystem);
+        engineMesh.userData.smokeSystem = smokeSystem;
     } else if (engineType === 'engine-diesel') {
         engineMesh = createDieselEngine();
     } else if (engineType === 'engine-bullet') {
         engineMesh = createBulletEngine();
     }
 
-    trainGroup.add(engineMesh);
+    return engineMesh;
+}
 
-    // Create cars behind engine
-    let offset = -0.9; // Start behind engine
-    for (const carType of cars) {
-        let carMesh;
-        if (carType === 'car-passenger') {
-            carMesh = createPassengerCar();
-        } else if (carType === 'car-freight') {
-            carMesh = createFreightCar();
-        }
-        carMesh.position.z = offset;
-        trainGroup.add(carMesh);
-        offset -= 0.9;
+function createCarMesh(carType) {
+    if (carType === 'car-passenger') {
+        return createPassengerCar();
+    } else if (carType === 'car-freight') {
+        return createFreightCar();
+    } else if (carType === 'car-caboose') {
+        return createCaboose();
     }
-
-    return trainGroup;
+    return null;
 }
 
 function createSteamEngine() {
@@ -1589,31 +1625,56 @@ function createBulletEngine() {
 function createPassengerCar() {
     const group = new THREE.Group();
 
+    // Lift entire car higher
+    const verticalOffset = 0.10;
+
     // Body (light blue)
     const bodyGeometry = new THREE.BoxGeometry(0.55, 0.45, 0.8);
     const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x87CEEB });
     const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.position.y = 0.325;
+    body.position.y = 0.325 + verticalOffset;
     body.castShadow = true;
     group.add(body);
 
-    // Windows (darker blue squares)
+    // Windows (darker blue squares) - slightly outside body to avoid z-fighting
     const windowGeometry = new THREE.BoxGeometry(0.15, 0.15, 0.02);
     const windowMaterial = new THREE.MeshLambertMaterial({ color: 0x4682B4 });
+    const bodyHalfWidth = 0.55 / 2; // Body is 0.55 wide, so edge is at ±0.275
+    const windowXPos = bodyHalfWidth + 0.001; // Position slightly outside to prevent flickering
+
+    // Position windows evenly along body length (body is 0.8 long, from -0.4 to +0.4)
+    const windowZPositions = [-0.25, 0, 0.25]; // Keep windows within body bounds
+
     for (let i = 0; i < 3; i++) {
         const window1 = new THREE.Mesh(windowGeometry, windowMaterial);
-        window1.position.set(0.28, 0.4, -0.2 + i * 0.3);
+        window1.position.set(windowXPos, 0.4 + verticalOffset, windowZPositions[i]);
         window1.rotation.y = Math.PI / 2;
         group.add(window1);
 
         const window2 = new THREE.Mesh(windowGeometry, windowMaterial);
-        window2.position.set(-0.28, 0.4, -0.2 + i * 0.3);
+        window2.position.set(-windowXPos, 0.4 + verticalOffset, windowZPositions[i]);
         window2.rotation.y = -Math.PI / 2;
         group.add(window2);
     }
 
-    // Wheels
-    addWheels(group);
+    // Wheels - narrower gauge (closer together side-to-side), but wider for visibility
+    const wheelGeometry = new THREE.CylinderGeometry(0.12, 0.12, 0.14, 12); // Slightly narrower to avoid body overlap
+    const wheelMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+
+    const wheelPositions = [
+        [-0.21, 0.12 + verticalOffset, 0.2],   // Front left - moved out slightly to avoid z-fighting
+        [0.21, 0.12 + verticalOffset, 0.2],    // Front right - moved out slightly to avoid z-fighting
+        [-0.21, 0.12 + verticalOffset, -0.2],  // Rear left - moved out slightly to avoid z-fighting
+        [0.21, 0.12 + verticalOffset, -0.2]    // Rear right - moved out slightly to avoid z-fighting
+    ];
+
+    wheelPositions.forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        wheel.position.set(pos[0], pos[1], pos[2]);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.castShadow = true;
+        group.add(wheel);
+    });
 
     return group;
 }
@@ -1646,6 +1707,112 @@ function createFreightCar() {
     return group;
 }
 
+function createCaboose() {
+    const group = new THREE.Group();
+
+    // Same vertical offset as passenger car
+    const verticalOffset = 0.10;
+
+    // Main body (red)
+    const bodyGeometry = new THREE.BoxGeometry(0.55, 0.35, 0.8);
+    const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xCC0000 }); // Classic caboose red
+    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    body.position.y = 0.275 + verticalOffset;
+    body.castShadow = true;
+    group.add(body);
+
+    // Cupola (observation deck on top)
+    const cupolaGeometry = new THREE.BoxGeometry(0.35, 0.20, 0.40);
+    const cupolaMaterial = new THREE.MeshLambertMaterial({ color: 0xAA0000 }); // Darker red
+    const cupola = new THREE.Mesh(cupolaGeometry, cupolaMaterial);
+    cupola.position.y = 0.55 + verticalOffset;
+    cupola.castShadow = true;
+    group.add(cupola);
+
+    // Cupola windows (small windows all around)
+    const cupolaWindowGeometry = new THREE.BoxGeometry(0.10, 0.10, 0.02);
+    const windowMaterial = new THREE.MeshLambertMaterial({ color: 0xFFD700 }); // Gold/yellow windows
+
+    // Front and back cupola windows
+    const frontCupolaWindow = new THREE.Mesh(cupolaWindowGeometry, windowMaterial);
+    frontCupolaWindow.position.set(0, 0.55 + verticalOffset, 0.21);
+    group.add(frontCupolaWindow);
+
+    const backCupolaWindow = new THREE.Mesh(cupolaWindowGeometry, windowMaterial);
+    backCupolaWindow.position.set(0, 0.55 + verticalOffset, -0.21);
+    group.add(backCupolaWindow);
+
+    // Side cupola windows
+    const leftCupolaWindow = new THREE.Mesh(cupolaWindowGeometry, windowMaterial);
+    leftCupolaWindow.position.set(-0.176, 0.55 + verticalOffset, 0);
+    leftCupolaWindow.rotation.y = Math.PI / 2;
+    group.add(leftCupolaWindow);
+
+    const rightCupolaWindow = new THREE.Mesh(cupolaWindowGeometry, windowMaterial);
+    rightCupolaWindow.position.set(0.176, 0.55 + verticalOffset, 0);
+    rightCupolaWindow.rotation.y = Math.PI / 2;
+    group.add(rightCupolaWindow);
+
+    // Main body windows (side windows)
+    const bodyWindowGeometry = new THREE.BoxGeometry(0.12, 0.12, 0.02);
+    const bodyHalfWidth = 0.55 / 2;
+    const windowXPos = bodyHalfWidth + 0.001;
+
+    const windowZPositions = [0.25, -0.25]; // Front and back windows
+
+    for (let i = 0; i < windowZPositions.length; i++) {
+        const window1 = new THREE.Mesh(bodyWindowGeometry, windowMaterial);
+        window1.position.set(windowXPos, 0.3 + verticalOffset, windowZPositions[i]);
+        window1.rotation.y = Math.PI / 2;
+        group.add(window1);
+
+        const window2 = new THREE.Mesh(bodyWindowGeometry, windowMaterial);
+        window2.position.set(-windowXPos, 0.3 + verticalOffset, windowZPositions[i]);
+        window2.rotation.y = -Math.PI / 2;
+        group.add(window2);
+    }
+
+    // Rear platform/railing
+    const platformGeometry = new THREE.BoxGeometry(0.50, 0.03, 0.15);
+    const platformMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Brown wood
+    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+    platform.position.set(0, 0.13 + verticalOffset, -0.475);
+    group.add(platform);
+
+    // Railing posts
+    const railingPostGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.25, 8);
+    const railingMaterial = new THREE.MeshLambertMaterial({ color: 0xFFD700 }); // Gold railing
+
+    const leftPost = new THREE.Mesh(railingPostGeometry, railingMaterial);
+    leftPost.position.set(-0.20, 0.25 + verticalOffset, -0.475);
+    group.add(leftPost);
+
+    const rightPost = new THREE.Mesh(railingPostGeometry, railingMaterial);
+    rightPost.position.set(0.20, 0.25 + verticalOffset, -0.475);
+    group.add(rightPost);
+
+    // Wheels - same as passenger car
+    const wheelGeometry = new THREE.CylinderGeometry(0.12, 0.12, 0.14, 12);
+    const wheelMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+
+    const wheelPositions = [
+        [-0.21, 0.12 + verticalOffset, 0.2],
+        [0.21, 0.12 + verticalOffset, 0.2],
+        [-0.21, 0.12 + verticalOffset, -0.2],
+        [0.21, 0.12 + verticalOffset, -0.2]
+    ];
+
+    wheelPositions.forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        wheel.position.set(pos[0], pos[1], pos[2]);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.castShadow = true;
+        group.add(wheel);
+    });
+
+    return group;
+}
+
 function addWheels(group) {
     const wheelGeometry = new THREE.CylinderGeometry(0.12, 0.12, 0.08, 12);
     const wheelMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
@@ -1664,6 +1831,68 @@ function addWheels(group) {
         wheel.castShadow = true;
         group.add(wheel);
     });
+}
+
+// ============================================================================
+// CAR ATTACHMENT
+// ============================================================================
+
+function addCarToTrain(train, carType) {
+    // Get the last segment of the train
+    const lastSegment = train.segments[train.segments.length - 1];
+
+    // Create new car mesh
+    const carMesh = createCarMesh(carType);
+
+    // Calculate initial position for the new car (behind last segment)
+    // Use different spacing for first car vs subsequent cars
+    const segmentIndex = train.segments.length;
+    const spacing = (segmentIndex === 1) ? ENGINE_TO_CAR_SPACING : SEGMENT_SPACING;
+    const targetDistanceBehind = spacing / CELL_SIZE; // in cell units
+
+    let targetProgress = lastSegment.progress - targetDistanceBehind;
+    let targetRow = lastSegment.row;
+    let targetCol = lastSegment.col;
+    let targetEnterDir = lastSegment.enterDir;
+    let targetDir = lastSegment.dir;
+
+    // If target progress is negative, we need to go back to previous cell(s)
+    while (targetProgress < 0) {
+        targetProgress += 1.0;
+
+        // Move back one cell
+        const prevState = getPreviousState(targetRow, targetCol, targetEnterDir);
+        if (!prevState) {
+            // Can't go further back, just use current position
+            targetProgress = 0;
+            break;
+        }
+
+        targetRow = prevState.row;
+        targetCol = prevState.col;
+        targetEnterDir = prevState.enterDir;
+        targetDir = prevState.dir;
+    }
+
+    const newSegment = {
+        type: carType,
+        mesh: carMesh,
+        row: targetRow,
+        col: targetCol,
+        dir: targetDir,
+        enterDir: targetEnterDir,
+        progress: targetProgress
+    };
+
+    // Position the car mesh at the calculated position
+    scene.add(carMesh);
+    updateSegmentPosition(newSegment);
+
+    // Add to train segments
+    train.segments.push(newSegment);
+
+    // Play sound feedback
+    playSound('place');
 }
 
 // ============================================================================
@@ -1830,9 +2059,11 @@ function deleteTrack(row, col) {
 
             // Remove any trains at either location
             trains = trains.filter(train => {
-                if ((train.row === startRow && train.col === startCol) ||
-                    (train.row === endRow && train.col === endCol)) {
-                    scene.remove(train.mesh);
+                const engineSeg = train.segments[0];
+                if ((engineSeg.row === startRow && engineSeg.col === startCol) ||
+                    (engineSeg.row === endRow && engineSeg.col === endCol)) {
+                    // Remove all segment meshes
+                    train.segments.forEach(seg => scene.remove(seg.mesh));
                     return false;
                 }
                 return true;
@@ -1846,8 +2077,10 @@ function deleteTrack(row, col) {
 
             // Remove any trains at this location
             trains = trains.filter(train => {
-                if (train.row === row && train.col === col) {
-                    scene.remove(train.mesh);
+                const engineSeg = train.segments[0];
+                if (engineSeg.row === row && engineSeg.col === col) {
+                    // Remove all segment meshes
+                    train.segments.forEach(seg => scene.remove(seg.mesh));
                     return false;
                 }
                 return true;
@@ -1982,15 +2215,17 @@ function placeTrain(row, col, engineType) {
 
     // Remove any existing train at this location
     trains = trains.filter(train => {
-        if (train.row === row && train.col === col) {
-            scene.remove(train.mesh);
+        const engineSeg = train.segments[0];
+        if (engineSeg.row === row && engineSeg.col === col) {
+            // Remove all segment meshes
+            train.segments.forEach(seg => scene.remove(seg.mesh));
             return false;
         }
         return true;
     });
 
-    // Create train
-    const trainMesh = createTrainMesh(engineType, []);
+    // Create engine mesh
+    const engineMesh = createEngineMesh(engineType);
 
     // Determine initial direction based on track type
     let initialDir = DIR.RIGHT;
@@ -2057,20 +2292,22 @@ function placeTrain(row, col, engineType) {
         }
     }
 
-    trainMesh.position.set(startX, 0.08, startZ);
-    trainMesh.rotation.y = getRotationForDirection(initialEnterDir);
-    scene.add(trainMesh);
+    engineMesh.position.set(startX, 0.08, startZ);
+    engineMesh.rotation.y = getRotationForDirection(initialEnterDir);
+    scene.add(engineMesh);
 
+    // Create train with segments array
     trains.push({
-        row,
-        col,
-        dir: initialDir,
-        enterDir: initialEnterDir,
-        engineType: engineType,
-        cars: [],
-        mesh: trainMesh,
+        segments: [{
+            type: engineType,
+            mesh: engineMesh,
+            row,
+            col,
+            dir: initialDir,
+            enterDir: initialEnterDir,
+            progress: 0
+        }],
         speed: 1.5, // cells per second
-        progress: 0, // 0 to 1 within current cell
         moving: false,
         stopped: false
     });
@@ -2100,34 +2337,46 @@ function getRotationForDirection(dir) {
 
 function stepTrains(delta) {
     trains.forEach(train => {
-        // Update smoke particles for steam engines
-        if (train.mesh.userData.smokeSystem) {
+        // Update smoke particles for steam engines (on engine segment)
+        const engineSeg = train.segments[0];
+        if (engineSeg.mesh.userData.smokeSystem) {
             const shouldEmitSmoke = isPlaying && !train.stopped;
-            updateSmokeParticles(train.mesh.userData.smokeSystem, delta, shouldEmitSmoke);
+            updateSmokeParticles(engineSeg.mesh.userData.smokeSystem, delta, shouldEmitSmoke);
         }
 
         if (!isPlaying) return;
-
-        const cell = grid[train.row][train.col];
-        if (!cell || cell.kind !== 'track') {
-            return; // Train is stuck
-        }
 
         // Don't move if train has stopped at end of track
         if (train.stopped) {
             return;
         }
 
-        train.progress += train.speed * delta;
-
-        if (train.progress >= 1.0) {
-            // Move to next cell
-            train.progress = 0;
-            moveTrainToNextCell(train);
+        // Move engine segment (leader)
+        const engineCell = grid[engineSeg.row][engineSeg.col];
+        if (!engineCell || engineCell.kind !== 'track') {
+            return; // Train is stuck
         }
 
-        // Interpolate position
-        updateTrainPosition(train);
+        engineSeg.progress += train.speed * delta;
+
+        if (engineSeg.progress >= 1.0) {
+            // Move engine to next cell
+            engineSeg.progress = 0;
+            moveSegmentToNextCell(engineSeg, train);
+        }
+
+        // Update engine position
+        updateSegmentPosition(engineSeg);
+
+        // Move each car segment to follow the one in front
+        for (let i = 1; i < train.segments.length; i++) {
+            const segment = train.segments[i];
+            const leadSegment = train.segments[i - 1];
+
+            // Follow the lead segment (pass segment index for spacing calculation)
+            followLeadSegment(segment, leadSegment, train, i);
+            updateSegmentPosition(segment);
+        }
     });
 }
 
@@ -2189,16 +2438,16 @@ function updateSmokeParticles(smokeSystem, delta, shouldEmit) {
     smokeSystem.geometry.attributes.position.needsUpdate = true;
 }
 
-function moveTrainToNextCell(train) {
-    const cell = grid[train.row][train.col];
+function moveSegmentToNextCell(segment, train) {
+    const cell = grid[segment.row][segment.col];
     const trackType = cell.trackType;
 
     // Determine next state using enterDir (direction from previous cell)
-    const next = getNextState(train.row, train.col, train.enterDir, trackType);
+    const next = getNextState(segment.row, segment.col, segment.enterDir, trackType);
 
     if (!next) {
         // No valid next cell, stop the train
-        train.progress = 1.0; // Keep at end of current cell
+        segment.progress = 1.0; // Keep at end of current cell
         train.stopped = true;
         updateSteamEngineSound();
         return;
@@ -2208,17 +2457,123 @@ function moveTrainToNextCell(train) {
     const nextCell = grid[next.row][next.col];
     if (!nextCell || nextCell.kind !== 'track') {
         // Reached end of track, stop the train
-        train.progress = 1.0; // Keep at end of current cell
+        segment.progress = 1.0; // Keep at end of current cell
         train.stopped = true;
         updateSteamEngineSound();
         return;
     }
 
-    // Move train and update both dir and enterDir
-    train.row = next.row;
-    train.col = next.col;
-    train.dir = next.exitDir;         // direction leaving this cell
-    train.enterDir = next.nextEnterDir; // direction entering the new cell (same as exitDir)
+    // Move segment and update both dir and enterDir
+    segment.row = next.row;
+    segment.col = next.col;
+    segment.dir = next.exitDir;         // direction leaving this cell
+    segment.enterDir = next.nextEnterDir; // direction entering the new cell (same as exitDir)
+}
+
+function followLeadSegment(segment, leadSegment, train, segmentIndex) {
+    // Use different spacing for first car vs subsequent cars
+    // First car (index 1) gets ENGINE_TO_CAR_SPACING, others get SEGMENT_SPACING
+    const spacing = (segmentIndex === 1) ? ENGINE_TO_CAR_SPACING : SEGMENT_SPACING;
+    const targetDistanceBehind = spacing / CELL_SIZE; // in cell units
+
+    // Calculate the "virtual progress" this segment should have
+    // by looking at where the lead segment is
+    let targetProgress = leadSegment.progress - targetDistanceBehind;
+    let targetRow = leadSegment.row;
+    let targetCol = leadSegment.col;
+    let targetEnterDir = leadSegment.enterDir;
+    let targetDir = leadSegment.dir;
+
+    // If target progress is negative, we need to go back to previous cell(s)
+    while (targetProgress < 0) {
+        targetProgress += 1.0;
+
+        // Move back one cell
+        const prevState = getPreviousState(targetRow, targetCol, targetEnterDir);
+        if (!prevState) {
+            // Can't go further back, just stay at current position
+            return;
+        }
+
+        targetRow = prevState.row;
+        targetCol = prevState.col;
+        targetEnterDir = prevState.enterDir;
+        targetDir = prevState.dir;
+    }
+
+    // Update segment to target position
+    segment.row = targetRow;
+    segment.col = targetCol;
+    segment.progress = targetProgress;
+    segment.enterDir = targetEnterDir;
+    segment.dir = targetDir;
+}
+
+function getPreviousState(row, col, enterDir) {
+    // Get the cell we came from based on enterDir
+    let prevRow = row;
+    let prevCol = col;
+    let prevExitDir = enterDir; // The direction we exited the previous cell
+
+    // Reverse the enterDir to find where we came from
+    if (enterDir === DIR.UP) {
+        prevRow = row + 1; // came from below
+    } else if (enterDir === DIR.DOWN) {
+        prevRow = row - 1; // came from above
+    } else if (enterDir === DIR.LEFT) {
+        prevCol = col + 1; // came from right
+    } else if (enterDir === DIR.RIGHT) {
+        prevCol = col - 1; // came from left
+    }
+
+    // Check if previous cell exists and has track
+    if (prevRow < 0 || prevRow >= GRID_SIZE || prevCol < 0 || prevCol >= GRID_SIZE) {
+        return null;
+    }
+
+    const prevCell = grid[prevRow][prevCol];
+    if (!prevCell || prevCell.kind !== 'track') {
+        return null;
+    }
+
+    // Determine what enterDir was for the previous cell
+    // We exited in prevExitDir direction, so we need to find what enterDir would lead to that exit
+    const trackType = prevCell.trackType;
+    let prevEnterDir = null;
+
+    // For straight tracks
+    if (trackType === 'straight-h' || trackType === 'crossing-h') {
+        prevEnterDir = prevExitDir; // same direction
+    } else if (trackType === 'straight-v' || trackType === 'crossing-v') {
+        prevEnterDir = prevExitDir; // same direction
+    } else if (trackType.startsWith('curve-')) {
+        // For curves, we need to find which enterDir leads to our exitDir
+        // This is the inverse of the curve mapping
+        if (trackType === 'curve-tl') {
+            if (prevExitDir === DIR.LEFT) prevEnterDir = DIR.DOWN;
+            else if (prevExitDir === DIR.UP) prevEnterDir = DIR.RIGHT;
+        } else if (trackType === 'curve-tr') {
+            if (prevExitDir === DIR.RIGHT) prevEnterDir = DIR.DOWN;
+            else if (prevExitDir === DIR.UP) prevEnterDir = DIR.LEFT;
+        } else if (trackType === 'curve-bl') {
+            if (prevExitDir === DIR.LEFT) prevEnterDir = DIR.UP;
+            else if (prevExitDir === DIR.DOWN) prevEnterDir = DIR.RIGHT;
+        } else if (trackType === 'curve-br') {
+            if (prevExitDir === DIR.RIGHT) prevEnterDir = DIR.UP;
+            else if (prevExitDir === DIR.DOWN) prevEnterDir = DIR.LEFT;
+        }
+    }
+
+    if (prevEnterDir === null) {
+        return null;
+    }
+
+    return {
+        row: prevRow,
+        col: prevCol,
+        enterDir: prevEnterDir,
+        dir: prevExitDir
+    };
 }
 
 // Connectivity logic using enterDir as direction from previous cell
@@ -2303,31 +2658,33 @@ function getNextState(row, col, enterDir, trackType) {
     return { row: nextRow, col: nextCol, exitDir, nextEnterDir };
 }
 
-function updateTrainPosition(train) {
-    const cell = grid[train.row][train.col];
+function updateSegmentPosition(segment) {
+    const cell = grid[segment.row][segment.col];
+    if (!cell || cell.kind !== 'track') return;
+
     const trackType = cell.trackType;
 
-    const cellCenterX = train.col * CELL_SIZE + CELL_SIZE / 2;
-    const cellCenterZ = train.row * CELL_SIZE + CELL_SIZE / 2;
+    const cellCenterX = segment.col * CELL_SIZE + CELL_SIZE / 2;
+    const cellCenterZ = segment.row * CELL_SIZE + CELL_SIZE / 2;
 
     let x = cellCenterX;
     let z = cellCenterZ;
-    let rotation = train.mesh.rotation.y;
+    let rotation = segment.mesh.rotation.y;
 
     if (trackType === 'straight-h' || trackType === 'crossing-h') {
-        if (train.enterDir === DIR.LEFT) {
-            x = cellCenterX + CELL_SIZE / 2 - train.progress * CELL_SIZE;
-        } else if (train.enterDir === DIR.RIGHT) {
-            x = cellCenterX - CELL_SIZE / 2 + train.progress * CELL_SIZE;
+        if (segment.enterDir === DIR.LEFT) {
+            x = cellCenterX + CELL_SIZE / 2 - segment.progress * CELL_SIZE;
+        } else if (segment.enterDir === DIR.RIGHT) {
+            x = cellCenterX - CELL_SIZE / 2 + segment.progress * CELL_SIZE;
         }
-        rotation = getRotationForDirection(train.enterDir);
+        rotation = getRotationForDirection(segment.enterDir);
     } else if (trackType === 'straight-v' || trackType === 'crossing-v') {
-        if (train.enterDir === DIR.UP) {
-            z = cellCenterZ + CELL_SIZE / 2 - train.progress * CELL_SIZE;
-        } else if (train.enterDir === DIR.DOWN) {
-            z = cellCenterZ - CELL_SIZE / 2 + train.progress * CELL_SIZE;
+        if (segment.enterDir === DIR.UP) {
+            z = cellCenterZ + CELL_SIZE / 2 - segment.progress * CELL_SIZE;
+        } else if (segment.enterDir === DIR.DOWN) {
+            z = cellCenterZ - CELL_SIZE / 2 + segment.progress * CELL_SIZE;
         }
-        rotation = getRotationForDirection(train.enterDir);
+        rotation = getRotationForDirection(segment.enterDir);
     } else if (trackType.startsWith('curve-')) {
         const R = CELL_SIZE / 2;
         let centerX, centerZ, startAngle, endAngle;
@@ -2336,11 +2693,11 @@ function updateTrainPosition(train) {
             centerX = cellCenterX - R;
             centerZ = cellCenterZ - R;
 
-            if (train.enterDir === DIR.DOWN) {
+            if (segment.enterDir === DIR.DOWN) {
                 // Travel TOP -> LEFT: angle 0 to PI/2
                 startAngle = 0;
                 endAngle = Math.PI / 2;
-            } else if (train.enterDir === DIR.RIGHT) {
+            } else if (segment.enterDir === DIR.RIGHT) {
                 // Travel LEFT -> TOP: angle PI/2 to 0 (reverse)
                 startAngle = Math.PI / 2;
                 endAngle = 0;
@@ -2349,11 +2706,11 @@ function updateTrainPosition(train) {
             centerX = cellCenterX + R;
             centerZ = cellCenterZ - R;
 
-            if (train.enterDir === DIR.DOWN) {
+            if (segment.enterDir === DIR.DOWN) {
                 // Travel TOP -> RIGHT: angle PI to PI/2 (reverse)
                 startAngle = Math.PI;
                 endAngle = Math.PI / 2;
-            } else if (train.enterDir === DIR.LEFT) {
+            } else if (segment.enterDir === DIR.LEFT) {
                 // Travel RIGHT -> TOP: angle PI/2 to PI
                 startAngle = Math.PI / 2;
                 endAngle = Math.PI;
@@ -2362,11 +2719,11 @@ function updateTrainPosition(train) {
             centerX = cellCenterX - R;
             centerZ = cellCenterZ + R;
 
-            if (train.enterDir === DIR.UP) {
+            if (segment.enterDir === DIR.UP) {
                 // Travel BOTTOM -> LEFT: angle 0 to -PI/2 (reverse)
                 startAngle = 0;
                 endAngle = -Math.PI / 2;
-            } else if (train.enterDir === DIR.RIGHT) {
+            } else if (segment.enterDir === DIR.RIGHT) {
                 // Travel LEFT -> BOTTOM: angle -PI/2 to 0
                 startAngle = -Math.PI / 2;
                 endAngle = 0;
@@ -2375,11 +2732,11 @@ function updateTrainPosition(train) {
             centerX = cellCenterX + R;
             centerZ = cellCenterZ + R;
 
-            if (train.enterDir === DIR.UP) {
+            if (segment.enterDir === DIR.UP) {
                 // Travel BOTTOM -> RIGHT: angle PI to 3*PI/2
                 startAngle = Math.PI;
                 endAngle = Math.PI * 1.5;
-            } else if (train.enterDir === DIR.LEFT) {
+            } else if (segment.enterDir === DIR.LEFT) {
                 // Travel RIGHT -> BOTTOM: angle 3*PI/2 to PI (reverse)
                 startAngle = Math.PI * 1.5;
                 endAngle = Math.PI;
@@ -2389,10 +2746,10 @@ function updateTrainPosition(train) {
         if (startAngle === undefined || endAngle === undefined) {
             x = cellCenterX;
             z = cellCenterZ;
-            rotation = getRotationForDirection(train.enterDir);
+            rotation = getRotationForDirection(segment.enterDir);
         } else {
             const dAngle = endAngle - startAngle;
-            const currentAngle = startAngle + dAngle * train.progress;
+            const currentAngle = startAngle + dAngle * segment.progress;
 
             x = centerX + R * Math.cos(currentAngle);
             z = centerZ + R * Math.sin(currentAngle);
@@ -2405,9 +2762,9 @@ function updateTrainPosition(train) {
         }
     }
 
-    train.mesh.position.x = x;
-    train.mesh.position.z = z;
-    train.mesh.rotation.y = rotation;
+    segment.mesh.position.x = x;
+    segment.mesh.position.z = z;
+    segment.mesh.rotation.y = rotation;
 }
 
 // ============================================================================
@@ -2467,7 +2824,7 @@ function updateSteamEngineSound() {
 
     // Check if there are any steam engines on the tracks that are moving (not stopped)
     const hasMovingSteamEngine = trains.some(train =>
-        train.engineType === 'engine-steam' && !train.stopped
+        train.segments[0].type === 'engine-steam' && !train.stopped
     );
 
     if (soundEnabled && isPlaying && hasMovingSteamEngine) {
@@ -2501,12 +2858,14 @@ function updateCrossings(delta) {
         const crossingCol2 = crossing.horizontal ? crossingCol1 + 1 : crossingCol1;
 
         trains.forEach(train => {
-            // Check if train is on either of the crossing's two cells
+            // Check if any segment is on either of the crossing's two cells
             if (!train.stopped) {
-                if ((train.row === crossingRow1 && train.col === crossingCol1) ||
-                    (train.row === crossingRow2 && train.col === crossingCol2)) {
-                    trainOnCrossing = true;
-                }
+                train.segments.forEach(segment => {
+                    if ((segment.row === crossingRow1 && segment.col === crossingCol1) ||
+                        (segment.row === crossingRow2 && segment.col === crossingCol2)) {
+                        trainOnCrossing = true;
+                    }
+                });
             }
         });
 

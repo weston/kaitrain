@@ -214,6 +214,91 @@ body {
     }
 }
 
+/* Custom train car icons */
+.icon-diesel {
+    width: 32px;
+    height: 24px;
+    background: linear-gradient(to bottom, #FFB020 0%, #FF9C20 100%);
+    border: 2px solid #333;
+    border-radius: 2px;
+    position: relative;
+    margin: 0 auto;
+}
+
+.icon-diesel::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 4px;
+    width: 24px;
+    height: 8px;
+    background: linear-gradient(to bottom, #FFD700 0%, #FFA500 100%);
+    border-radius: 1px;
+}
+
+.icon-diesel::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: 6px;
+    width: 6px;
+    height: 4px;
+    background: #87CEEB;
+    box-shadow: 12px 0 0 #87CEEB;
+}
+
+.icon-passenger {
+    width: 32px;
+    height: 20px;
+    background: linear-gradient(to bottom, #A8D8EA 0%, #87CEEB 100%);
+    border: 2px solid #333;
+    border-radius: 2px;
+    position: relative;
+    margin: 0 auto;
+}
+
+.icon-passenger::before {
+    content: '';
+    position: absolute;
+    top: 4px;
+    left: 3px;
+    width: 5px;
+    height: 5px;
+    background: #4682B4;
+    box-shadow: 8px 0 0 #4682B4, 16px 0 0 #4682B4;
+}
+
+.icon-caboose {
+    width: 32px;
+    height: 24px;
+    position: relative;
+    margin: 0 auto;
+}
+
+.icon-caboose::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 32px;
+    height: 16px;
+    background: linear-gradient(to bottom, #DD0000 0%, #CC0000 100%);
+    border: 2px solid #333;
+    border-radius: 2px;
+}
+
+.icon-caboose::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 8px;
+    width: 16px;
+    height: 12px;
+    background: linear-gradient(to bottom, #CC0000 0%, #AA0000 100%);
+    border: 2px solid #333;
+    border-radius: 1px;
+}
+
 /* Landscape mode adjustments */
 @media (orientation: landscape) and (max-height: 600px) {
     #top-bar {
