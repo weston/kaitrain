@@ -39,6 +39,157 @@ let crossings = []; // { row, col, mesh, arms: [arm1, arm2], active: bool, dingS
 const SEGMENT_SPACING = 0.9; // Distance between segments
 const ENGINE_TO_CAR_SPACING = 1.05; // Extra space between engine and first car
 
+// Default layout (set to null to start empty, or paste layout data here)
+const DEFAULT_LAYOUT = {
+    "tracks": [
+        { "row": 1, "col": 1, "trackType": "curve-br" },
+        { "row": 1, "col": 2, "trackType": "curve-bl" },
+        { "row": 1, "col": 3, "trackType": "curve-br" },
+        { "row": 1, "col": 4, "trackType": "curve-bl" },
+        { "row": 1, "col": 5, "trackType": "curve-br" },
+        { "row": 1, "col": 6, "trackType": "curve-bl" },
+        { "row": 1, "col": 7, "trackType": "curve-br" },
+        { "row": 1, "col": 8, "trackType": "curve-bl" },
+        { "row": 1, "col": 9, "trackType": "curve-br" },
+        { "row": 1, "col": 10, "trackType": "curve-bl" },
+        { "row": 1, "col": 11, "trackType": "curve-br" },
+        { "row": 1, "col": 12, "trackType": "curve-bl" },
+        { "row": 1, "col": 13, "trackType": "curve-br" },
+        { "row": 1, "col": 14, "trackType": "straight-h" },
+        { "row": 1, "col": 15, "trackType": "curve-bl" },
+        { "row": 2, "col": 1, "trackType": "straight-v" },
+        { "row": 2, "col": 2, "trackType": "curve-tr" },
+        { "row": 2, "col": 3, "trackType": "curve-tl" },
+        { "row": 2, "col": 4, "trackType": "curve-tr" },
+        { "row": 2, "col": 5, "trackType": "curve-tl" },
+        { "row": 2, "col": 6, "trackType": "curve-tr" },
+        { "row": 2, "col": 7, "trackType": "curve-tl" },
+        { "row": 2, "col": 8, "trackType": "curve-tr" },
+        { "row": 2, "col": 9, "trackType": "curve-tl" },
+        { "row": 2, "col": 10, "trackType": "curve-tr" },
+        { "row": 2, "col": 11, "trackType": "curve-tl" },
+        { "row": 2, "col": 12, "trackType": "curve-tr" },
+        { "row": 2, "col": 13, "trackType": "curve-tl" },
+        { "row": 2, "col": 15, "trackType": "straight-v" },
+        { "row": 3, "col": 1, "trackType": "straight-v" },
+        { "row": 3, "col": 8, "trackType": "curve-br" },
+        { "row": 3, "col": 9, "trackType": "curve-bl" },
+        { "row": 3, "col": 15, "trackType": "straight-v" },
+        { "row": 4, "col": 1, "trackType": "straight-v" },
+        { "row": 4, "col": 5, "trackType": "curve-br" },
+        { "row": 4, "col": 6, "trackType": "curve-bl" },
+        { "row": 4, "col": 7, "trackType": "curve-br" },
+        { "row": 4, "col": 8, "trackType": "curve-tl" },
+        { "row": 4, "col": 9, "trackType": "curve-tr" },
+        { "row": 4, "col": 10, "trackType": "straight-h" },
+        { "row": 4, "col": 11, "trackType": "straight-h" },
+        { "row": 4, "col": 12, "trackType": "crossing-h" },
+        { "row": 4, "col": 14, "trackType": "straight-h" },
+        { "row": 4, "col": 15, "trackType": "curve-tl" },
+        { "row": 5, "col": 1, "trackType": "curve-tr" },
+        { "row": 5, "col": 2, "trackType": "straight-h" },
+        { "row": 5, "col": 3, "trackType": "straight-h" },
+        { "row": 5, "col": 4, "trackType": "straight-h" },
+        { "row": 5, "col": 5, "trackType": "curve-tl" },
+        { "row": 5, "col": 6, "trackType": "straight-v" },
+        { "row": 5, "col": 7, "trackType": "straight-v" },
+        { "row": 5, "col": 13, "trackType": "curve-br" },
+        { "row": 5, "col": 14, "trackType": "curve-bl" },
+        { "row": 6, "col": 1, "trackType": "curve-br" },
+        { "row": 6, "col": 2, "trackType": "straight-h" },
+        { "row": 6, "col": 3, "trackType": "straight-h" },
+        { "row": 6, "col": 4, "trackType": "straight-h" },
+        { "row": 6, "col": 5, "trackType": "straight-h" },
+        { "row": 6, "col": 6, "trackType": "curve-tl" },
+        { "row": 6, "col": 7, "trackType": "straight-v" },
+        { "row": 6, "col": 8, "trackType": "curve-br" },
+        { "row": 6, "col": 9, "trackType": "straight-h" },
+        { "row": 6, "col": 10, "trackType": "crossing-h" },
+        { "row": 6, "col": 12, "trackType": "curve-bl" },
+        { "row": 6, "col": 13, "trackType": "straight-v" },
+        { "row": 6, "col": 14, "trackType": "straight-v" },
+        { "row": 7, "col": 1, "trackType": "straight-v" },
+        { "row": 7, "col": 3, "trackType": "curve-br" },
+        { "row": 7, "col": 4, "trackType": "straight-h" },
+        { "row": 7, "col": 5, "trackType": "straight-h" },
+        { "row": 7, "col": 6, "trackType": "straight-h" },
+        { "row": 7, "col": 7, "trackType": "curve-tl" },
+        { "row": 7, "col": 8, "trackType": "straight-v" },
+        { "row": 7, "col": 12, "trackType": "straight-v" },
+        { "row": 7, "col": 13, "trackType": "straight-v" },
+        { "row": 7, "col": 14, "trackType": "straight-v" },
+        { "row": 8, "col": 1, "trackType": "straight-v" },
+        { "row": 8, "col": 3, "trackType": "curve-tr" },
+        { "row": 8, "col": 4, "trackType": "straight-h" },
+        { "row": 8, "col": 5, "trackType": "straight-h" },
+        { "row": 8, "col": 6, "trackType": "straight-h" },
+        { "row": 8, "col": 7, "trackType": "curve-bl" },
+        { "row": 8, "col": 8, "trackType": "straight-v" },
+        { "row": 8, "col": 12, "trackType": "straight-v" },
+        { "row": 8, "col": 13, "trackType": "straight-v" },
+        { "row": 8, "col": 14, "trackType": "straight-v" },
+        { "row": 9, "col": 1, "trackType": "crossing-v" },
+        { "row": 9, "col": 7, "trackType": "straight-v" },
+        { "row": 9, "col": 8, "trackType": "straight-v" },
+        { "row": 9, "col": 9, "trackType": "curve-br" },
+        { "row": 9, "col": 10, "trackType": "curve-bl" },
+        { "row": 9, "col": 12, "trackType": "curve-tr" },
+        { "row": 9, "col": 13, "trackType": "curve-tl" },
+        { "row": 9, "col": 14, "trackType": "straight-v" },
+        { "row": 10, "col": 7, "trackType": "straight-v" },
+        { "row": 10, "col": 8, "trackType": "straight-v" },
+        { "row": 10, "col": 9, "trackType": "straight-v" },
+        { "row": 10, "col": 10, "trackType": "straight-v" },
+        { "row": 10, "col": 14, "trackType": "straight-v" },
+        { "row": 11, "col": 1, "trackType": "straight-v" },
+        { "row": 11, "col": 3, "trackType": "curve-br" },
+        { "row": 11, "col": 4, "trackType": "straight-h" },
+        { "row": 11, "col": 5, "trackType": "straight-h" },
+        { "row": 11, "col": 6, "trackType": "straight-h" },
+        { "row": 11, "col": 7, "trackType": "curve-tl" },
+        { "row": 11, "col": 8, "trackType": "straight-v" },
+        { "row": 11, "col": 9, "trackType": "straight-v" },
+        { "row": 11, "col": 10, "trackType": "straight-v" },
+        { "row": 11, "col": 14, "trackType": "straight-v" },
+        { "row": 12, "col": 1, "trackType": "straight-v" },
+        { "row": 12, "col": 3, "trackType": "straight-v" },
+        { "row": 12, "col": 8, "trackType": "straight-v" },
+        { "row": 12, "col": 9, "trackType": "straight-v" },
+        { "row": 12, "col": 10, "trackType": "straight-v" },
+        { "row": 12, "col": 14, "trackType": "straight-v" },
+        { "row": 13, "col": 1, "trackType": "straight-v" },
+        { "row": 13, "col": 3, "trackType": "curve-tr" },
+        { "row": 13, "col": 4, "trackType": "straight-h" },
+        { "row": 13, "col": 5, "trackType": "straight-h" },
+        { "row": 13, "col": 6, "trackType": "straight-h" },
+        { "row": 13, "col": 7, "trackType": "straight-h" },
+        { "row": 13, "col": 8, "trackType": "curve-tl" },
+        { "row": 13, "col": 9, "trackType": "straight-v" },
+        { "row": 13, "col": 10, "trackType": "straight-v" },
+        { "row": 13, "col": 14, "trackType": "straight-v" },
+        { "row": 14, "col": 1, "trackType": "curve-tr" },
+        { "row": 14, "col": 2, "trackType": "straight-h" },
+        { "row": 14, "col": 3, "trackType": "crossing-h" },
+        { "row": 14, "col": 5, "trackType": "crossing-h" },
+        { "row": 14, "col": 7, "trackType": "straight-h" },
+        { "row": 14, "col": 8, "trackType": "straight-h" },
+        { "row": 14, "col": 9, "trackType": "curve-tl" },
+        { "row": 14, "col": 10, "trackType": "curve-tr" },
+        { "row": 14, "col": 11, "trackType": "straight-h" },
+        { "row": 14, "col": 12, "trackType": "crossing-h" },
+        { "row": 14, "col": 14, "trackType": "curve-tl" }
+    ],
+    "trains": [],
+    "crossings": [
+        { "row": 14, "col": 12, "horizontal": true },
+        { "row": 14, "col": 5, "horizontal": true },
+        { "row": 14, "col": 3, "horizontal": true },
+        { "row": 6, "col": 10, "horizontal": true },
+        { "row": 9, "col": 1, "horizontal": false },
+        { "row": 4, "col": 12, "horizontal": true }
+    ]
+};
+
 // Raycaster for picking
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -53,6 +204,15 @@ function init() {
     initScene();
     initUI();
     initAudio();
+
+    // Make exportLayout available globally for console access
+    window.exportLayout = exportLayout;
+
+    // Load default layout if provided
+    if (DEFAULT_LAYOUT) {
+        loadLayout(DEFAULT_LAYOUT);
+    }
+
     animate();
 }
 
@@ -3015,6 +3175,139 @@ function animate(time = 0) {
     stepTrains(delta);
     updateCrossings(delta);
     renderer.render(scene, camera);
+}
+
+// ============================================================================
+// LAYOUT EXPORT/IMPORT
+// ============================================================================
+
+function exportLayout() {
+    const layout = {
+        tracks: [],
+        trains: [],
+        crossings: []
+    };
+
+    // Export tracks
+    for (let r = 0; r < GRID_SIZE; r++) {
+        for (let c = 0; c < GRID_SIZE; c++) {
+            const cell = grid[r][c];
+            if (cell && cell.kind === 'track' && cell.trackType) {
+                // Skip crossing end cells (they're part of the start cell)
+                if (!cell.isCrossingEnd) {
+                    layout.tracks.push({
+                        row: r,
+                        col: c,
+                        trackType: cell.trackType
+                    });
+                }
+            }
+        }
+    }
+
+    // Export trains
+    trains.forEach(train => {
+        const engineSeg = train.segments[0];
+        const trainData = {
+            row: engineSeg.row,
+            col: engineSeg.col,
+            engineType: engineSeg.type,
+            dir: engineSeg.dir,
+            enterDir: engineSeg.enterDir,
+            cars: train.segments.slice(1).map(seg => seg.type)
+        };
+        layout.trains.push(trainData);
+    });
+
+    // Export crossings (they're already in the tracks, but we need to mark them)
+    crossings.forEach(crossing => {
+        layout.crossings.push({
+            row: crossing.row,
+            col: crossing.col,
+            horizontal: crossing.horizontal
+        });
+    });
+
+    console.log('LAYOUT_DATA:', JSON.stringify(layout, null, 2));
+    return layout;
+}
+
+// Make exportLayout available globally for console access
+window.exportLayout = exportLayout;
+
+function loadLayout(layoutData) {
+    // Clear existing layout
+    trains.forEach(train => {
+        train.segments.forEach(seg => scene.remove(seg.mesh));
+    });
+    trains = [];
+    crossings = [];
+
+    for (let r = 0; r < GRID_SIZE; r++) {
+        for (let c = 0; c < GRID_SIZE; c++) {
+            if (grid[r][c] && grid[r][c].mesh) {
+                scene.remove(grid[r][c].mesh);
+            }
+            grid[r][c] = { kind: null };
+        }
+    }
+
+    // Create a set of crossing cells to skip when placing tracks
+    const crossingCells = new Set();
+    if (layoutData.crossings) {
+        layoutData.crossings.forEach(crossing => {
+            crossingCells.add(`${crossing.row},${crossing.col}`);
+            const nextRow = crossing.horizontal ? crossing.row : crossing.row + 1;
+            const nextCol = crossing.horizontal ? crossing.col + 1 : crossing.col;
+            crossingCells.add(`${nextRow},${nextCol}`);
+        });
+    }
+
+    // Load tracks (skip crossing cells, they'll be loaded separately)
+    if (layoutData.tracks) {
+        layoutData.tracks.forEach(track => {
+            const cellKey = `${track.row},${track.col}`;
+            if (!crossingCells.has(cellKey)) {
+                placeTrackPiece(track.row, track.col, track.trackType);
+            }
+        });
+    }
+
+    // Load crossings (need to recreate them properly)
+    if (layoutData.crossings) {
+        layoutData.crossings.forEach(crossing => {
+            // Place the crossing (it will handle removing any existing tracks)
+            placeCrossing(crossing.row, crossing.col);
+        });
+    }
+
+    // Load trains
+    if (layoutData.trains) {
+        layoutData.trains.forEach(trainData => {
+            // Place the engine
+            placeTrain(trainData.row, trainData.col, trainData.engineType);
+            const train = trains[trains.length - 1];
+
+            // Update train direction and position
+            if (train) {
+                train.segments[0].dir = trainData.dir;
+                train.segments[0].enterDir = trainData.enterDir;
+
+                // Update mesh rotation to match direction
+                train.segments[0].mesh.rotation.y = getRotationForDirection(trainData.enterDir);
+
+                // Add cars
+                trainData.cars.forEach(carType => {
+                    addCarToTrain(train, carType);
+                });
+
+                // Update all segment positions after adding cars
+                train.segments.forEach(seg => {
+                    updateSegmentPosition(seg);
+                });
+            }
+        });
+    }
 }
 
 // ============================================================================
