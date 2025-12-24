@@ -28,7 +28,7 @@ let scene, camera, renderer, controls;
 let groundPlane, gridHelper;
 let grid = []; // grid[row][col] = { kind, trackType, mesh, ... }
 let trains = []; // { segments: [{ type, mesh, row, col, dir, enterDir, progress }], speed, moving, stopped }
-let selectedTool = 'straight'; // 'straight', 'curve', 'crossing', 'tunnel', 'engine-steam', 'engine-diesel', 'delete'
+let selectedTool = 'straight'; // 'straight', 'curve', 'crossing', 'tunnel', 'engine-steam', 'engine-diesel', 'car-passenger', 'car-caboose', 'follow', 'delete'
 let isPlaying = false;
 let soundEnabled = true;
 let audioContext = null;
@@ -36,6 +36,9 @@ let steamEngineSound = null;
 let dingSound = null;
 let crossings = []; // { row, col, mesh, arms: [arm1, arm2], active: bool, dingSound: Audio }
 let snowParticles = null; // Snow particle system
+let followingTrain = null; // Train being followed by camera
+let originalCameraPosition = null; // Stored camera position for returning
+let originalCameraTarget = null; // Stored camera target for returning
 
 const SEGMENT_SPACING = 0.9; // Distance between segments
 const ENGINE_TO_CAR_SPACING = 1.05; // Extra space between engine and first car
@@ -374,7 +377,12 @@ function initUI() {
     // Item buttons
     document.querySelectorAll('.item-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            selectedTool = btn.dataset.type;
+            const newTool = btn.dataset.type;
+            // Exit follow mode if switching away from follow tool
+            if (selectedTool === 'follow' && newTool !== 'follow' && followingTrain) {
+                exitFollowMode();
+            }
+            selectedTool = newTool;
             updateSelection();
         });
     });
@@ -427,6 +435,43 @@ function onPointerUp(event) {
 function handleTap() {
     raycaster.setFromCamera(pointer, camera);
 
+    // In follow mode, check for train clicks to follow
+    if (selectedTool === 'follow') {
+        const trainMeshes = [];
+        trains.forEach(t => {
+            t.segments.forEach(seg => trainMeshes.push(seg.mesh));
+        });
+        const trainIntersects = raycaster.intersectObjects(trainMeshes, true);
+
+        if (trainIntersects.length > 0) {
+            const clickedMesh = trainIntersects[0].object;
+            let clickedSegmentMesh = clickedMesh;
+
+            // Traverse up to find the segment mesh
+            while (clickedSegmentMesh.parent && !trains.some(t =>
+                t.segments.some(seg => seg.mesh === clickedSegmentMesh)
+            )) {
+                clickedSegmentMesh = clickedSegmentMesh.parent;
+            }
+
+            // Find which train was clicked
+            const trainIndex = trains.findIndex(t =>
+                t.segments.some(seg => seg.mesh === clickedSegmentMesh)
+            );
+
+            if (trainIndex !== -1) {
+                const train = trains[trainIndex];
+                // Toggle follow mode
+                if (followingTrain === train) {
+                    exitFollowMode();
+                } else {
+                    enterFollowMode(train);
+                }
+                return;
+            }
+        }
+    }
+
     // In delete mode, check for trains first
     if (selectedTool === 'delete') {
         // Check for train hits (check all segment meshes)
@@ -453,6 +498,10 @@ function handleTap() {
                 t.segments.some(seg => seg.mesh === clickedSegmentMesh)
             );
             if (trainIndex !== -1) {
+                // If following this train, exit follow mode first
+                if (followingTrain === trains[trainIndex]) {
+                    exitFollowMode();
+                }
                 // Remove all segment meshes
                 trains[trainIndex].segments.forEach(seg => scene.remove(seg.mesh));
                 trains.splice(trainIndex, 1);
@@ -3362,6 +3411,62 @@ function playDingSound() {
 }
 
 // ============================================================================
+// CAMERA FOLLOW MODE
+// ============================================================================
+
+function enterFollowMode(train) {
+    // Store original camera position
+    originalCameraPosition = camera.position.clone();
+    originalCameraTarget = controls.target.clone();
+
+    followingTrain = train;
+    console.log('Following train');
+}
+
+function exitFollowMode() {
+    if (!followingTrain) return;
+
+    // Restore original camera position
+    if (originalCameraPosition && originalCameraTarget) {
+        camera.position.copy(originalCameraPosition);
+        controls.target.copy(originalCameraTarget);
+    }
+
+    followingTrain = null;
+    controls.enabled = true;
+    console.log('Exited follow mode');
+}
+
+function updateFollowCamera() {
+    if (!followingTrain || followingTrain.segments.length === 0) return;
+
+    const engine = followingTrain.segments[0];
+    const enginePos = engine.mesh.position;
+
+    // Get engine rotation to position camera behind it
+    const engineRotation = engine.mesh.rotation.y;
+
+    // Camera offset behind and above the train
+    const offsetDistance = 3;
+    const offsetHeight = 1.5;
+
+    // Position camera behind the train based on its rotation
+    camera.position.x = enginePos.x - Math.sin(engineRotation) * offsetDistance;
+    camera.position.z = enginePos.z - Math.cos(engineRotation) * offsetDistance;
+    camera.position.y = enginePos.y + offsetHeight;
+
+    // Look at a point in front of the train
+    const lookAheadDistance = 2;
+    const lookAtPoint = new THREE.Vector3(
+        enginePos.x + Math.sin(engineRotation) * lookAheadDistance,
+        enginePos.y + 0.5,
+        enginePos.z + Math.cos(engineRotation) * lookAheadDistance
+    );
+
+    camera.lookAt(lookAtPoint);
+}
+
+// ============================================================================
 // ANIMATION LOOP
 // ============================================================================
 
@@ -3373,7 +3478,15 @@ function animate(time = 0) {
     const delta = Math.min((time - lastTime) / 1000, 0.1);
     lastTime = time;
 
-    controls.update();
+    // Update camera to follow train if in follow mode
+    if (followingTrain && followingTrain.segments.length > 0) {
+        updateFollowCamera();
+        controls.enabled = false;
+    } else {
+        controls.enabled = true;
+        controls.update();
+    }
+
     stepTrains(delta);
     updateCrossings(delta);
     updateSnow(delta);
