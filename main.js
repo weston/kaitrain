@@ -28,7 +28,7 @@ let scene, camera, renderer, controls;
 let groundPlane, gridHelper;
 let grid = []; // grid[row][col] = { kind, trackType, mesh, ... }
 let trains = []; // { segments: [{ type, mesh, row, col, dir, enterDir, progress }], speed, moving, stopped }
-let selectedTool = 'straight'; // 'straight', 'curve', 'crossing', 'tunnel', 'engine-steam', 'engine-diesel', 'car-passenger', 'car-caboose', 'follow', 'delete'
+let selectedTool = 'straight'; // 'straight', 'curve', 'crossing', 'tunnel', 'tree', 'engine-steam', 'engine-diesel', 'car-passenger', 'car-caboose', 'follow', 'delete'
 let isPlaying = false;
 let soundEnabled = true;
 let audioContext = null;
@@ -103,8 +103,8 @@ const DEFAULT_LAYOUT = {
         { "row": 5, "col": 13, "trackType": "curve-br" },
         { "row": 5, "col": 14, "trackType": "curve-bl" },
         { "row": 6, "col": 1, "trackType": "curve-br" },
-        { "row": 6, "col": 2, "trackType": "straight-h" },
-        { "row": 6, "col": 3, "trackType": "straight-h" },
+        { "row": 6, "col": 2, "trackType": "tunnel-h" },
+        { "row": 6, "col": 3, "trackType": "tunnel-h" },
         { "row": 6, "col": 4, "trackType": "straight-h" },
         { "row": 6, "col": 5, "trackType": "straight-h" },
         { "row": 6, "col": 6, "trackType": "curve-tl" },
@@ -142,12 +142,12 @@ const DEFAULT_LAYOUT = {
         { "row": 9, "col": 10, "trackType": "curve-bl" },
         { "row": 9, "col": 12, "trackType": "curve-tr" },
         { "row": 9, "col": 13, "trackType": "curve-tl" },
-        { "row": 9, "col": 14, "trackType": "straight-v" },
+        { "row": 9, "col": 14, "trackType": "tunnel-v" },
         { "row": 10, "col": 7, "trackType": "straight-v" },
         { "row": 10, "col": 8, "trackType": "straight-v" },
         { "row": 10, "col": 9, "trackType": "straight-v" },
         { "row": 10, "col": 10, "trackType": "straight-v" },
-        { "row": 10, "col": 14, "trackType": "straight-v" },
+        { "row": 10, "col": 14, "trackType": "tunnel-v" },
         { "row": 11, "col": 1, "trackType": "straight-v" },
         { "row": 11, "col": 3, "trackType": "curve-br" },
         { "row": 11, "col": 4, "trackType": "straight-h" },
@@ -157,13 +157,13 @@ const DEFAULT_LAYOUT = {
         { "row": 11, "col": 8, "trackType": "straight-v" },
         { "row": 11, "col": 9, "trackType": "straight-v" },
         { "row": 11, "col": 10, "trackType": "straight-v" },
-        { "row": 11, "col": 14, "trackType": "straight-v" },
+        { "row": 11, "col": 14, "trackType": "tunnel-v" },
         { "row": 12, "col": 1, "trackType": "straight-v" },
         { "row": 12, "col": 3, "trackType": "straight-v" },
         { "row": 12, "col": 8, "trackType": "straight-v" },
         { "row": 12, "col": 9, "trackType": "straight-v" },
         { "row": 12, "col": 10, "trackType": "straight-v" },
-        { "row": 12, "col": 14, "trackType": "straight-v" },
+        { "row": 12, "col": 14, "trackType": "tunnel-v" },
         { "row": 13, "col": 1, "trackType": "straight-v" },
         { "row": 13, "col": 3, "trackType": "curve-tr" },
         { "row": 13, "col": 4, "trackType": "straight-h" },
@@ -552,7 +552,7 @@ function handleTap() {
             }
         }
 
-        // Check for track hits
+        // Check for track and tree hits
         const trackMeshes = [];
         for (let r = 0; r < GRID_SIZE; r++) {
             for (let c = 0; c < GRID_SIZE; c++) {
@@ -622,6 +622,8 @@ function handleTap() {
                 placeCrossing(row, col);
             } else if (selectedTool === 'tunnel') {
                 placeTunnel(row, col);
+            } else if (selectedTool === 'tree') {
+                placeTree(row, col);
             } else if (selectedTool === 'engine-steam' || selectedTool === 'engine-diesel') {
                 placeTrain(row, col, selectedTool);
             } else if (selectedTool === 'delete') {
@@ -1496,21 +1498,76 @@ function createLevelCrossing(group, horizontal) {
     group.userData.lightState = 0; // For alternating flash
 }
 
-function createTree(group) {
-    // Simple tree: brown trunk + green cone
-    const trunkGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.8, 8);
-    const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.y = 0.4;
-    trunk.castShadow = true;
-    group.add(trunk);
+function createTree(group, treeType = null) {
+    // If no type specified, randomly choose one
+    if (treeType === null) {
+        treeType = Math.floor(Math.random() * 3);
+    }
 
-    const foliageGeometry = new THREE.ConeGeometry(0.6, 1.2, 8);
-    const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
-    const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
-    foliage.position.y = 1.4;
-    foliage.castShadow = true;
-    group.add(foliage);
+    if (treeType === 0) {
+        // Tree Type 1: Classic Pine - tall cone
+        const trunkGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.8, 8);
+        const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        trunk.position.y = 0.4;
+        trunk.castShadow = true;
+        group.add(trunk);
+
+        const foliageGeometry = new THREE.ConeGeometry(0.6, 1.2, 8);
+        const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+        const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+        foliage.position.y = 1.4;
+        foliage.castShadow = true;
+        group.add(foliage);
+    } else if (treeType === 1) {
+        // Tree Type 2: Deciduous - shorter with round foliage
+        const trunkGeometry = new THREE.CylinderGeometry(0.12, 0.15, 0.6, 8);
+        const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        trunk.position.y = 0.3;
+        trunk.castShadow = true;
+        group.add(trunk);
+
+        const foliageGeometry = new THREE.SphereGeometry(0.5, 8, 6);
+        const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x2d5016 });
+        const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+        foliage.position.y = 1.0;
+        foliage.scale.y = 1.2; // Slightly taller sphere
+        foliage.castShadow = true;
+        group.add(foliage);
+    } else {
+        // Tree Type 3: Tall Spruce - very tall with layered foliage
+        const trunkGeometry = new THREE.CylinderGeometry(0.12, 0.18, 1.0, 8);
+        const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x6B4423 });
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        trunk.position.y = 0.5;
+        trunk.castShadow = true;
+        group.add(trunk);
+
+        // Bottom layer
+        const foliage1Geometry = new THREE.ConeGeometry(0.7, 0.8, 8);
+        const foliage1Material = new THREE.MeshLambertMaterial({ color: 0x1a5f1a });
+        const foliage1 = new THREE.Mesh(foliage1Geometry, foliage1Material);
+        foliage1.position.y = 1.2;
+        foliage1.castShadow = true;
+        group.add(foliage1);
+
+        // Middle layer
+        const foliage2Geometry = new THREE.ConeGeometry(0.5, 0.7, 8);
+        const foliage2Material = new THREE.MeshLambertMaterial({ color: 0x1a5f1a });
+        const foliage2 = new THREE.Mesh(foliage2Geometry, foliage2Material);
+        foliage2.position.y = 1.7;
+        foliage2.castShadow = true;
+        group.add(foliage2);
+
+        // Top layer
+        const foliage3Geometry = new THREE.ConeGeometry(0.3, 0.5, 8);
+        const foliage3Material = new THREE.MeshLambertMaterial({ color: 0x1a5f1a });
+        const foliage3 = new THREE.Mesh(foliage3Geometry, foliage3Material);
+        foliage3.position.y = 2.1;
+        foliage3.castShadow = true;
+        group.add(foliage3);
+    }
 }
 
 function createStation(group) {
@@ -2443,6 +2500,16 @@ function placeTrackPiece(row, col, trackType) {
 function deleteTrack(row, col) {
     const cell = grid[row][col];
 
+    // Delete trees
+    if (cell && cell.kind === 'tree') {
+        if (cell.mesh) {
+            scene.remove(cell.mesh);
+        }
+        grid[row][col] = { kind: null };
+        playSound('place');
+        return;
+    }
+
     // Only delete if there's a track
     if (cell && cell.kind === 'track') {
         // Check if this is a crossing
@@ -2661,6 +2728,43 @@ function placeTunnel(row, col) {
         kind: 'track',
         trackType: trackType,
         mesh: tunnelMesh
+    };
+
+    playSound('place');
+}
+
+function placeTree(row, col, treeType = null) {
+    const cell = grid[row][col];
+
+    // Trees can be placed on empty cells (not on tracks)
+    if (cell && cell.kind === 'track') {
+        console.log('Cannot place tree on track');
+        return;
+    }
+
+    // Remove existing tree if present
+    if (cell && cell.mesh && cell.kind === 'tree') {
+        scene.remove(cell.mesh);
+    }
+
+    // Randomly choose tree type if not specified
+    if (treeType === null) {
+        treeType = Math.floor(Math.random() * 3);
+    }
+
+    // Create tree mesh with specific type
+    const treeGroup = new THREE.Group();
+    createTree(treeGroup, treeType);
+    const x = col * CELL_SIZE + CELL_SIZE / 2;
+    const z = row * CELL_SIZE + CELL_SIZE / 2;
+    treeGroup.position.set(x, 0, z);
+    scene.add(treeGroup);
+
+    // Update grid
+    grid[row][col] = {
+        kind: 'tree',
+        mesh: treeGroup,
+        treeType: treeType
     };
 
     playSound('place');
@@ -3571,7 +3675,8 @@ function exportLayout() {
     const layout = {
         tracks: [],
         trains: [],
-        crossings: []
+        crossings: [],
+        trees: []
     };
 
     // Export tracks
@@ -3587,6 +3692,12 @@ function exportLayout() {
                         trackType: cell.trackType
                     });
                 }
+            } else if (cell && cell.kind === 'tree') {
+                layout.trees.push({
+                    row: r,
+                    col: c,
+                    treeType: cell.treeType !== undefined ? cell.treeType : 0
+                });
             }
         }
     }
@@ -3620,6 +3731,31 @@ function exportLayout() {
 
 // Make exportLayout available globally for console access
 window.exportLayout = exportLayout;
+
+// Helper function to export layout and copy to clipboard (if available) or log it
+window.copyLayout = function () {
+    const layout = exportLayout();
+    const layoutString = JSON.stringify(layout, null, 2);
+
+    // Try to copy to clipboard
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(layoutString).then(() => {
+            console.log('✓ Layout copied to clipboard!');
+            console.log('Layout data:', layout);
+        }).catch(err => {
+            console.log('Could not copy to clipboard, logging instead:', err);
+            console.log('Layout data:', layout);
+            console.log('Copy this JSON:');
+            console.log(layoutString);
+        });
+    } else {
+        console.log('Layout data:', layout);
+        console.log('Copy this JSON:');
+        console.log(layoutString);
+    }
+
+    return layout;
+};
 
 function loadLayout(layoutData) {
     // Clear existing layout
@@ -3664,6 +3800,13 @@ function loadLayout(layoutData) {
         layoutData.crossings.forEach(crossing => {
             // Place the crossing (it will handle removing any existing tracks)
             placeCrossing(crossing.row, crossing.col);
+        });
+    }
+
+    // Load trees
+    if (layoutData.trees) {
+        layoutData.trees.forEach(tree => {
+            placeTree(tree.row, tree.col, tree.treeType !== undefined ? tree.treeType : null);
         });
     }
 
