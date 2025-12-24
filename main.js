@@ -28,13 +28,14 @@ let scene, camera, renderer, controls;
 let groundPlane, gridHelper;
 let grid = []; // grid[row][col] = { kind, trackType, mesh, ... }
 let trains = []; // { segments: [{ type, mesh, row, col, dir, enterDir, progress }], speed, moving, stopped }
-let selectedTool = 'straight'; // 'straight', 'curve', 'crossing', 'engine-steam', 'engine-diesel', 'delete'
+let selectedTool = 'straight'; // 'straight', 'curve', 'crossing', 'tunnel', 'engine-steam', 'engine-diesel', 'delete'
 let isPlaying = false;
 let soundEnabled = true;
 let audioContext = null;
 let steamEngineSound = null;
 let dingSound = null;
 let crossings = []; // { row, col, mesh, arms: [arm1, arm2], active: bool, dingSound: Audio }
+let snowParticles = null; // Snow particle system
 
 const SEGMENT_SPACING = 0.9; // Distance between segments
 const ENGINE_TO_CAR_SPACING = 1.05; // Extra space between engine and first car
@@ -294,6 +295,44 @@ function initScene() {
     // Handle pointer events for placing
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+
+    // Add snow effects
+    createFallingSnow(groundSize);
+}
+
+function createFallingSnow(groundSize) {
+    const particleCount = 1000;
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = new Float32Array(particleCount * 3);
+
+    // Initialize particles
+    for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        // Random position across the ground area, starting at various heights
+        positions[i3] = Math.random() * groundSize;
+        positions[i3 + 1] = Math.random() * 20 + 10; // Height between 10 and 30
+        positions[i3 + 2] = Math.random() * groundSize;
+
+        // Random fall speed (slow)
+        velocities[i3] = (Math.random() - 0.5) * 0.1; // Slight horizontal drift
+        velocities[i3 + 1] = -0.05 - Math.random() * 0.05; // Slow downward fall
+        velocities[i3 + 2] = (Math.random() - 0.5) * 0.1; // Slight horizontal drift
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const material = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 0.1,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending
+    });
+
+    snowParticles = new THREE.Points(geometry, material);
+    snowParticles.userData.velocities = velocities;
+    scene.add(snowParticles);
 }
 
 function onWindowResize() {
@@ -491,6 +530,8 @@ function handleTap() {
                 placeTrackSmart(row, col, selectedTool);
             } else if (selectedTool === 'crossing') {
                 placeCrossing(row, col);
+            } else if (selectedTool === 'tunnel') {
+                placeTunnel(row, col);
             } else if (selectedTool === 'engine-steam' || selectedTool === 'engine-diesel') {
                 placeTrain(row, col, selectedTool);
             } else if (selectedTool === 'delete') {
@@ -511,6 +552,8 @@ function createTrackMesh(type) {
         createStraightTrack(group, type === 'straight-h');
     } else if (type === 'crossing-h' || type === 'crossing-v') {
         createLevelCrossing(group, type === 'crossing-h');
+    } else if (type === 'tunnel-h' || type === 'tunnel-v') {
+        createTunnelTrack(group, type === 'tunnel-h');
     } else if (type.startsWith('curve-')) {
         createCurvedTrack(group, type);
     } else if (type === 'tree') {
@@ -527,7 +570,7 @@ function createStraightTrack(group, horizontal) {
     const sleeperCount = 5;
     const sleeperSpacing = trackLength / (sleeperCount - 1);
     const sleeperWidth = 0.15;
-    const sleeperLength = SLEEPER_LENGTH
+    const sleeperLength = SLEEPER_LENGTH;
 
     // Sleepers (brown wooden ties)
     const sleeperGeometry = new THREE.BoxGeometry(
@@ -584,6 +627,110 @@ function createStraightTrack(group, horizontal) {
     rail1.castShadow = true;
     rail2.castShadow = true;
     group.add(rail1, rail2);
+}
+
+function createTunnelTrack(group, horizontal) {
+    // Create the base straight track first
+    createStraightTrack(group, horizontal);
+
+    // Add tunnel covering
+    const trackLength = CELL_SIZE * 0.99;
+    const tunnelHeight = 1.25;
+    const tunnelWidth = 1.05;
+    const wallThickness = 0.18;
+
+    // Main tunnel material (dark stone)
+    const tunnelMaterial = new THREE.MeshStandardMaterial({
+        color: 0x3a3a3a,
+        roughness: 0.95,
+        metalness: 0.02
+    });
+
+    if (horizontal) {
+        // Left wall
+        const leftWallGeometry = new THREE.BoxGeometry(trackLength, tunnelHeight, wallThickness);
+        const leftWall = new THREE.Mesh(leftWallGeometry, tunnelMaterial);
+        leftWall.position.set(0, tunnelHeight / 2, -tunnelWidth / 2);
+        leftWall.castShadow = true;
+        leftWall.receiveShadow = true;
+        group.add(leftWall);
+
+        // Right wall
+        const rightWallGeometry = new THREE.BoxGeometry(trackLength, tunnelHeight, wallThickness);
+        const rightWall = new THREE.Mesh(rightWallGeometry, tunnelMaterial);
+        rightWall.position.set(0, tunnelHeight / 2, tunnelWidth / 2);
+        rightWall.castShadow = true;
+        rightWall.receiveShadow = true;
+        group.add(rightWall);
+
+        // Arched roof - smoother curve with more segments
+        const segments = 12;
+        for (let i = 0; i < segments; i++) {
+            const angle1 = (Math.PI / segments) * i;
+            const angle2 = (Math.PI / segments) * (i + 1);
+
+            const archSegmentGeometry = new THREE.BoxGeometry(
+                trackLength,
+                wallThickness,
+                (tunnelWidth / 2) * (angle2 - angle1) + 0.01
+            );
+            const archSegment = new THREE.Mesh(archSegmentGeometry, tunnelMaterial);
+
+            const avgAngle = (angle1 + angle2) / 2;
+            archSegment.position.set(
+                0,
+                tunnelHeight + Math.sin(avgAngle) * (tunnelWidth / 2),
+                Math.cos(avgAngle) * (tunnelWidth / 2)
+            );
+            archSegment.rotation.x = -avgAngle;
+            archSegment.castShadow = true;
+            archSegment.receiveShadow = true;
+            group.add(archSegment);
+        }
+
+    } else {
+        // Vertical orientation
+        // Left wall (west)
+        const leftWallGeometry = new THREE.BoxGeometry(wallThickness, tunnelHeight, trackLength);
+        const leftWall = new THREE.Mesh(leftWallGeometry, tunnelMaterial);
+        leftWall.position.set(-tunnelWidth / 2, tunnelHeight / 2, 0);
+        leftWall.castShadow = true;
+        leftWall.receiveShadow = true;
+        group.add(leftWall);
+
+        // Right wall (east)
+        const rightWallGeometry = new THREE.BoxGeometry(wallThickness, tunnelHeight, trackLength);
+        const rightWall = new THREE.Mesh(rightWallGeometry, tunnelMaterial);
+        rightWall.position.set(tunnelWidth / 2, tunnelHeight / 2, 0);
+        rightWall.castShadow = true;
+        rightWall.receiveShadow = true;
+        group.add(rightWall);
+
+        // Arched roof - smoother curve
+        const segments = 12;
+        for (let i = 0; i < segments; i++) {
+            const angle1 = (Math.PI / segments) * i;
+            const angle2 = (Math.PI / segments) * (i + 1);
+
+            const archSegmentGeometry = new THREE.BoxGeometry(
+                (tunnelWidth / 2) * (angle2 - angle1) + 0.01,
+                wallThickness,
+                trackLength
+            );
+            const archSegment = new THREE.Mesh(archSegmentGeometry, tunnelMaterial);
+
+            const avgAngle = (angle1 + angle2) / 2;
+            archSegment.position.set(
+                Math.cos(avgAngle) * (tunnelWidth / 2),
+                tunnelHeight + Math.sin(avgAngle) * (tunnelWidth / 2),
+                0
+            );
+            archSegment.rotation.z = avgAngle;
+            archSegment.castShadow = true;
+            archSegment.receiveShadow = true;
+            group.add(archSegment);
+        }
+    }
 }
 
 function createCurvedTrack(group, type) {
@@ -2389,6 +2536,46 @@ function placeCrossing(row, col) {
     playSound('place');
 }
 
+function placeTunnel(row, col) {
+    const cell = grid[row][col];
+
+    // Must be on a straight track (not curve, crossing, or empty)
+    if (!cell || cell.kind !== 'track') {
+        console.log('No track at this location');
+        return;
+    }
+
+    if (cell.trackType !== 'straight-h' && cell.trackType !== 'straight-v') {
+        console.log('Tunnel can only be placed on straight tracks');
+        return;
+    }
+
+    // Determine orientation
+    const isHorizontal = cell.trackType === 'straight-h';
+    const trackType = isHorizontal ? 'tunnel-h' : 'tunnel-v';
+
+    // Remove existing track
+    if (cell.mesh) {
+        scene.remove(cell.mesh);
+    }
+
+    // Create tunnel track
+    const tunnelMesh = createTrackMesh(trackType);
+    const x = col * CELL_SIZE + CELL_SIZE / 2;
+    const z = row * CELL_SIZE + CELL_SIZE / 2;
+    tunnelMesh.position.set(x, 0, z);
+    scene.add(tunnelMesh);
+
+    // Update grid
+    grid[row][col] = {
+        kind: 'track',
+        trackType: trackType,
+        mesh: tunnelMesh
+    };
+
+    playSound('place');
+}
+
 function placeTrain(row, col, engineType) {
     const cell = grid[row][col];
 
@@ -2414,7 +2601,7 @@ function placeTrain(row, col, engineType) {
     // Determine initial direction based on track type
     let initialDir = DIR.RIGHT;
     let initialEnterDir = DIR.RIGHT; // Same as travel direction
-    if (cell.trackType === 'straight-v' || cell.trackType === 'crossing-v') {
+    if (cell.trackType === 'straight-v' || cell.trackType === 'crossing-v' || cell.trackType === 'tunnel-v') {
         initialDir = DIR.DOWN;
         initialEnterDir = DIR.DOWN;
     } else if (cell.trackType.startsWith('curve-')) {
@@ -2436,13 +2623,13 @@ function placeTrain(row, col, engineType) {
     let startX = cellCenterX;
     let startZ = cellCenterZ;
 
-    if (cell.trackType === 'straight-h' || cell.trackType === 'crossing-h') {
+    if (cell.trackType === 'straight-h' || cell.trackType === 'crossing-h' || cell.trackType === 'tunnel-h') {
         if (initialEnterDir === DIR.RIGHT) {
             startX = cellCenterX - CELL_SIZE / 2; // Left edge
         } else if (initialEnterDir === DIR.LEFT) {
             startX = cellCenterX + CELL_SIZE / 2; // Right edge
         }
-    } else if (cell.trackType === 'straight-v' || cell.trackType === 'crossing-v') {
+    } else if (cell.trackType === 'straight-v' || cell.trackType === 'crossing-v' || cell.trackType === 'tunnel-v') {
         if (initialEnterDir === DIR.DOWN) {
             startZ = cellCenterZ - CELL_SIZE / 2; // Top edge
         } else if (initialEnterDir === DIR.UP) {
@@ -2726,9 +2913,9 @@ function getPreviousState(row, col, enterDir) {
     let prevEnterDir = null;
 
     // For straight tracks
-    if (trackType === 'straight-h' || trackType === 'crossing-h') {
+    if (trackType === 'straight-h' || trackType === 'crossing-h' || trackType === 'tunnel-h') {
         prevEnterDir = prevExitDir; // same direction
-    } else if (trackType === 'straight-v' || trackType === 'crossing-v') {
+    } else if (trackType === 'straight-v' || trackType === 'crossing-v' || trackType === 'tunnel-v') {
         prevEnterDir = prevExitDir; // same direction
     } else if (trackType.startsWith('curve-')) {
         // For curves, we need to find which enterDir leads to our exitDir
@@ -2768,7 +2955,7 @@ function getNextState(row, col, enterDir, trackType) {
     let nextRow = row;
     let nextCol = col;
 
-    if (trackType === 'straight-h' || trackType === 'crossing-h') {
+    if (trackType === 'straight-h' || trackType === 'crossing-h' || trackType === 'tunnel-h') {
         if (enterDir === DIR.RIGHT) {
             exitDir = DIR.RIGHT;
             nextCol = col + 1;
@@ -2776,7 +2963,7 @@ function getNextState(row, col, enterDir, trackType) {
             exitDir = DIR.LEFT;
             nextCol = col - 1;
         }
-    } else if (trackType === 'straight-v' || trackType === 'crossing-v') {
+    } else if (trackType === 'straight-v' || trackType === 'crossing-v' || trackType === 'tunnel-v') {
         if (enterDir === DIR.DOWN) {
             exitDir = DIR.DOWN;
             nextRow = row + 1;
@@ -2855,14 +3042,14 @@ function updateSegmentPosition(segment) {
     let z = cellCenterZ;
     let rotation = segment.mesh.rotation.y;
 
-    if (trackType === 'straight-h' || trackType === 'crossing-h') {
+    if (trackType === 'straight-h' || trackType === 'crossing-h' || trackType === 'tunnel-h') {
         if (segment.enterDir === DIR.LEFT) {
             x = cellCenterX + CELL_SIZE / 2 - segment.progress * CELL_SIZE;
         } else if (segment.enterDir === DIR.RIGHT) {
             x = cellCenterX - CELL_SIZE / 2 + segment.progress * CELL_SIZE;
         }
         rotation = getRotationForDirection(segment.enterDir);
-    } else if (trackType === 'straight-v' || trackType === 'crossing-v') {
+    } else if (trackType === 'straight-v' || trackType === 'crossing-v' || trackType === 'tunnel-v') {
         if (segment.enterDir === DIR.UP) {
             z = cellCenterZ + CELL_SIZE / 2 - segment.progress * CELL_SIZE;
         } else if (segment.enterDir === DIR.DOWN) {
@@ -3174,7 +3361,37 @@ function animate(time = 0) {
     controls.update();
     stepTrains(delta);
     updateCrossings(delta);
+    updateSnow(delta);
     renderer.render(scene, camera);
+}
+
+function updateSnow(delta) {
+    if (!snowParticles) return;
+
+    const positions = snowParticles.geometry.attributes.position;
+    const velocities = snowParticles.userData.velocities;
+    const groundSize = GRID_SIZE * CELL_SIZE;
+
+    for (let i = 0; i < positions.count; i++) {
+        const i3 = i * 3;
+
+        // Update position based on velocity
+        positions.array[i3] += velocities[i3] * delta * 10;
+        positions.array[i3 + 1] += velocities[i3 + 1] * delta * 10;
+        positions.array[i3 + 2] += velocities[i3 + 2] * delta * 10;
+
+        // Reset particle if it falls below ground or goes out of bounds
+        if (positions.array[i3 + 1] < 0 ||
+            positions.array[i3] < 0 || positions.array[i3] > groundSize ||
+            positions.array[i3 + 2] < 0 || positions.array[i3 + 2] > groundSize) {
+            // Reset to top with random position
+            positions.array[i3] = Math.random() * groundSize;
+            positions.array[i3 + 1] = 20 + Math.random() * 10;
+            positions.array[i3 + 2] = Math.random() * groundSize;
+        }
+    }
+
+    positions.needsUpdate = true;
 }
 
 // ============================================================================
