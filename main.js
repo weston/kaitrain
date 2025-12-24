@@ -635,8 +635,8 @@ function createTunnelTrack(group, horizontal) {
 
     // Add tunnel covering
     const trackLength = CELL_SIZE * 0.99;
-    const tunnelHeight = 1.25;
-    const tunnelWidth = 1.05;
+    const tunnelHeight = 1.1;
+    const tunnelWidth = 1.0;
     const wallThickness = 0.18;
 
     // Main tunnel material (dark stone)
