@@ -39,6 +39,9 @@ let snowParticles = null; // Snow particle system
 let followingTrain = null; // Train being followed by camera
 let originalCameraPosition = null; // Stored camera position for returning
 let originalCameraTarget = null; // Stored camera target for returning
+let followCameraDistance = 3; // Adjustable distance for follow mode
+let followCameraHeight = 1.5; // Adjustable height for follow mode
+let lastPinchDistance = null; // For tracking pinch gestures
 
 const SEGMENT_SPACING = 0.9; // Distance between segments
 const ENGINE_TO_CAR_SPACING = 1.05; // Extra space between engine and first car
@@ -385,6 +388,44 @@ function initUI() {
             selectedTool = newTool;
             updateSelection();
         });
+    });
+
+    // Wheel event for zooming in follow mode
+    renderer.domElement.addEventListener('wheel', (event) => {
+        if (followingTrain) {
+            event.preventDefault();
+            const zoomSpeed = 0.001;
+            followCameraDistance += event.deltaY * zoomSpeed;
+            followCameraDistance = Math.max(0.5, Math.min(10, followCameraDistance));
+        }
+    }, { passive: false });
+
+    // Touch events for pinch zoom in follow mode
+    renderer.domElement.addEventListener('touchstart', (event) => {
+        if (followingTrain && event.touches.length === 2) {
+            const dx = event.touches[0].clientX - event.touches[1].clientX;
+            const dy = event.touches[0].clientY - event.touches[1].clientY;
+            lastPinchDistance = Math.sqrt(dx * dx + dy * dy);
+        }
+    });
+
+    renderer.domElement.addEventListener('touchmove', (event) => {
+        if (followingTrain && event.touches.length === 2 && lastPinchDistance !== null) {
+            event.preventDefault();
+            const dx = event.touches[0].clientX - event.touches[1].clientX;
+            const dy = event.touches[0].clientY - event.touches[1].clientY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const delta = lastPinchDistance - distance;
+            followCameraDistance += delta * 0.01;
+            followCameraDistance = Math.max(0.5, Math.min(10, followCameraDistance));
+            lastPinchDistance = distance;
+        }
+    }, { passive: false });
+
+    renderer.domElement.addEventListener('touchend', (event) => {
+        if (event.touches.length < 2) {
+            lastPinchDistance = null;
+        }
     });
 
     updateSelection();
@@ -3419,6 +3460,10 @@ function enterFollowMode(train) {
     originalCameraPosition = camera.position.clone();
     originalCameraTarget = controls.target.clone();
 
+    // Reset camera distance and height
+    followCameraDistance = 3;
+    followCameraHeight = 1.5;
+
     followingTrain = train;
     console.log('Following train');
 }
@@ -3446,14 +3491,10 @@ function updateFollowCamera() {
     // Get engine rotation to position camera behind it
     const engineRotation = engine.mesh.rotation.y;
 
-    // Camera offset behind and above the train
-    const offsetDistance = 3;
-    const offsetHeight = 1.5;
-
-    // Position camera behind the train based on its rotation
-    camera.position.x = enginePos.x - Math.sin(engineRotation) * offsetDistance;
-    camera.position.z = enginePos.z - Math.cos(engineRotation) * offsetDistance;
-    camera.position.y = enginePos.y + offsetHeight;
+    // Position camera behind the train based on its rotation and current zoom level
+    camera.position.x = enginePos.x - Math.sin(engineRotation) * followCameraDistance;
+    camera.position.z = enginePos.z - Math.cos(engineRotation) * followCameraDistance;
+    camera.position.y = enginePos.y + followCameraHeight;
 
     // Look at a point in front of the train
     const lookAheadDistance = 2;
