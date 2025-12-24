@@ -2712,7 +2712,10 @@ function stepTrains(delta) {
         const engineSeg = train.segments[0];
         if (engineSeg.mesh.userData.smokeSystem) {
             const shouldEmitSmoke = isPlaying && !train.stopped;
-            updateSmokeParticles(engineSeg.mesh.userData.smokeSystem, delta, shouldEmitSmoke);
+            // Check if engine is in a tunnel
+            const cell = grid[engineSeg.row][engineSeg.col];
+            const isInTunnel = cell && (cell.trackType === 'tunnel-h' || cell.trackType === 'tunnel-v');
+            updateSmokeParticles(engineSeg.mesh.userData.smokeSystem, delta, shouldEmitSmoke, isInTunnel);
         }
 
         if (!isPlaying) return;
@@ -2751,13 +2754,16 @@ function stepTrains(delta) {
     });
 }
 
-function updateSmokeParticles(smokeSystem, delta, shouldEmit) {
+function updateSmokeParticles(smokeSystem, delta, shouldEmit, isInTunnel) {
     if (!smokeSystem) return;
 
     const positions = smokeSystem.geometry.attributes.position.array;
     const velocities = smokeSystem.userData.velocities;
     const lifetimes = smokeSystem.userData.lifetimes;
     const particleCount = positions.length / 3;
+
+    // Tunnel ceiling height (relative to smoke system origin)
+    const tunnelCeilingHeight = 0.2; // Approximately 1.1 tunnel height - 0.91 smokestack position
 
     // Update existing particles
     for (let i = 0; i < particleCount; i++) {
@@ -2766,6 +2772,15 @@ function updateSmokeParticles(smokeSystem, delta, shouldEmit) {
             positions[i * 3] += velocities[i].x * delta;
             positions[i * 3 + 1] += velocities[i].y * delta;
             positions[i * 3 + 2] += velocities[i].z * delta;
+
+            // Cap smoke at tunnel ceiling if in tunnel
+            if (isInTunnel && positions[i * 3 + 1] > tunnelCeilingHeight) {
+                positions[i * 3 + 1] = tunnelCeilingHeight;
+                // Spread smoke horizontally instead when hitting ceiling
+                velocities[i].y = 0;
+                velocities[i].x *= 1.5;
+                velocities[i].z *= 1.5;
+            }
 
             // Decrease lifetime
             lifetimes[i] -= delta;
