@@ -50,33 +50,21 @@ const ENGINE_TO_CAR_SPACING = 1.05; // Extra space between engine and first car
 const DEFAULT_LAYOUT = {
     "tracks": [
         { "row": 1, "col": 1, "trackType": "curve-br" },
-        { "row": 1, "col": 2, "trackType": "curve-bl" },
-        { "row": 1, "col": 3, "trackType": "curve-br" },
-        { "row": 1, "col": 4, "trackType": "curve-bl" },
-        { "row": 1, "col": 5, "trackType": "curve-br" },
-        { "row": 1, "col": 6, "trackType": "curve-bl" },
-        { "row": 1, "col": 7, "trackType": "curve-br" },
-        { "row": 1, "col": 8, "trackType": "curve-bl" },
-        { "row": 1, "col": 9, "trackType": "curve-br" },
-        { "row": 1, "col": 10, "trackType": "curve-bl" },
-        { "row": 1, "col": 11, "trackType": "curve-br" },
-        { "row": 1, "col": 12, "trackType": "curve-bl" },
-        { "row": 1, "col": 13, "trackType": "curve-br" },
+        { "row": 1, "col": 2, "trackType": "straight-h" },
+        { "row": 1, "col": 3, "trackType": "tunnel-h" },
+        { "row": 1, "col": 4, "trackType": "tunnel-h" },
+        { "row": 1, "col": 5, "trackType": "tunnel-h" },
+        { "row": 1, "col": 6, "trackType": "tunnel-h" },
+        { "row": 1, "col": 7, "trackType": "straight-h" },
+        { "row": 1, "col": 8, "trackType": "straight-h" },
+        { "row": 1, "col": 9, "trackType": "straight-h" },
+        { "row": 1, "col": 10, "trackType": "straight-h" },
+        { "row": 1, "col": 11, "trackType": "tunnel-h" },
+        { "row": 1, "col": 12, "trackType": "tunnel-h" },
+        { "row": 1, "col": 13, "trackType": "tunnel-h" },
         { "row": 1, "col": 14, "trackType": "straight-h" },
         { "row": 1, "col": 15, "trackType": "curve-bl" },
         { "row": 2, "col": 1, "trackType": "straight-v" },
-        { "row": 2, "col": 2, "trackType": "curve-tr" },
-        { "row": 2, "col": 3, "trackType": "curve-tl" },
-        { "row": 2, "col": 4, "trackType": "curve-tr" },
-        { "row": 2, "col": 5, "trackType": "curve-tl" },
-        { "row": 2, "col": 6, "trackType": "curve-tr" },
-        { "row": 2, "col": 7, "trackType": "curve-tl" },
-        { "row": 2, "col": 8, "trackType": "curve-tr" },
-        { "row": 2, "col": 9, "trackType": "curve-tl" },
-        { "row": 2, "col": 10, "trackType": "curve-tr" },
-        { "row": 2, "col": 11, "trackType": "curve-tl" },
-        { "row": 2, "col": 12, "trackType": "curve-tr" },
-        { "row": 2, "col": 13, "trackType": "curve-tl" },
         { "row": 2, "col": 15, "trackType": "straight-v" },
         { "row": 3, "col": 1, "trackType": "straight-v" },
         { "row": 3, "col": 8, "trackType": "curve-br" },
@@ -194,6 +182,41 @@ const DEFAULT_LAYOUT = {
         { "row": 6, "col": 10, "horizontal": true },
         { "row": 9, "col": 1, "horizontal": false },
         { "row": 4, "col": 12, "horizontal": true }
+    ],
+    "trees": [
+        { "row": 0, "col": 1, "treeType": 0 },
+        { "row": 0, "col": 2, "treeType": 2 },
+        { "row": 0, "col": 6, "treeType": 2 },
+        { "row": 0, "col": 7, "treeType": 1 },
+        { "row": 0, "col": 8, "treeType": 0 },
+        { "row": 0, "col": 9, "treeType": 1 },
+        { "row": 0, "col": 10, "treeType": 2 },
+        { "row": 0, "col": 11, "treeType": 0 },
+        { "row": 0, "col": 13, "treeType": 0 },
+        { "row": 0, "col": 14, "treeType": 2 },
+        { "row": 1, "col": 0, "treeType": 1 },
+        { "row": 2, "col": 0, "treeType": 2 },
+        { "row": 2, "col": 3, "treeType": 2 },
+        { "row": 2, "col": 4, "treeType": 1 },
+        { "row": 2, "col": 6, "treeType": 2 },
+        { "row": 2, "col": 7, "treeType": 0 },
+        { "row": 2, "col": 8, "treeType": 2 },
+        { "row": 2, "col": 9, "treeType": 2 },
+        { "row": 2, "col": 10, "treeType": 1 },
+        { "row": 2, "col": 14, "treeType": 2 },
+        { "row": 3, "col": 3, "treeType": 2 },
+        { "row": 5, "col": 9, "treeType": 1 },
+        { "row": 7, "col": 10, "treeType": 2 },
+        { "row": 7, "col": 11, "treeType": 2 },
+        { "row": 9, "col": 3, "treeType": 1 },
+        { "row": 9, "col": 6, "treeType": 0 },
+        { "row": 10, "col": 6, "treeType": 1 },
+        { "row": 10, "col": 11, "treeType": 1 },
+        { "row": 11, "col": 12, "treeType": 0 },
+        { "row": 12, "col": 4, "treeType": 1 },
+        { "row": 12, "col": 5, "treeType": 2 },
+        { "row": 12, "col": 7, "treeType": 1 },
+        { "row": 12, "col": 12, "treeType": 2 }
     ]
 };
 
@@ -650,8 +673,6 @@ function createTrackMesh(type) {
         createCurvedTrack(group, type);
     } else if (type === 'tree') {
         createTree(group);
-    } else if (type === 'station') {
-        createStation(group);
     }
 
     return group;
@@ -1568,25 +1589,6 @@ function createTree(group, treeType = null) {
         foliage3.castShadow = true;
         group.add(foliage3);
     }
-}
-
-function createStation(group) {
-    // Simple station building
-    const buildingGeometry = new THREE.BoxGeometry(1.2, 0.8, 0.8);
-    const buildingMaterial = new THREE.MeshLambertMaterial({ color: 0xDC143C });
-    const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-    building.position.y = 0.4;
-    building.castShadow = true;
-    group.add(building);
-
-    // Roof
-    const roofGeometry = new THREE.ConeGeometry(0.9, 0.4, 4);
-    const roofMaterial = new THREE.MeshLambertMaterial({ color: 0x8B0000 });
-    const roof = new THREE.Mesh(roofGeometry, roofMaterial);
-    roof.position.y = 1.0;
-    roof.rotation.y = Math.PI / 4;
-    roof.castShadow = true;
-    group.add(roof);
 }
 
 // ============================================================================
